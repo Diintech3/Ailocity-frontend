@@ -207,18 +207,6 @@ function blankFromFields(fields) {
 export default function ClientPortal() {
   const token = localStorage.getItem(TOKEN_CLIENT)
   const navigate = useNavigate()
-
-  // Guard: agar TOKEN_CLIENT mein BD ka token aa gaya toh seedha BD dashboard pe bhejo
-  if (token) {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      if (payload.appId === 'ailocity-bd') {
-        localStorage.removeItem(TOKEN_CLIENT)
-        localStorage.setItem(TOKEN_BD, token)
-        return <Navigate to="/bd/dashboard" replace />
-      }
-    } catch { /* invalid token — normal flow handle karega */ }
-  }
   const [active, setActive] = useState('overview')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [bootLoading, setBootLoading] = useState(true)
@@ -252,10 +240,20 @@ export default function ClientPortal() {
   const [contactLogoUploading, setContactLogoUploading] = useState(false)
   const [contactSettingOpen, setContactSettingOpen] = useState(null)
   const [contactViewItem, setContactViewItem] = useState(null)
+  const [contactTab, setContactTab] = useState('all')
+  const [contactSearch, setContactSearch] = useState('')
 
-  const openContactView = async (r) => {
-    setContactViewItem(r)
-  }
+  const isBdToken = useMemo(() => {
+    if (!token) return false
+    try {
+      const parts = token.split('.')
+      if (parts.length < 2) return false
+      const payload = JSON.parse(atob(parts[1]))
+      return payload?.appId === 'ailocity-bd'
+    } catch {
+      return false
+    }
+  }, [token])
 
   useEffect(() => {
     const handler = (e) => {
@@ -339,7 +337,15 @@ export default function ClientPortal() {
     })()
   }, [active, token, loadTabCollection])
 
+  useEffect(() => {
+    if (!token || !isBdToken) return
+    localStorage.removeItem(TOKEN_CLIENT)
+    localStorage.setItem(TOKEN_BD, token)
+    navigate('/bd/dashboard', { replace: true })
+  }, [token, isBdToken, navigate])
+
   if (!token) return <Navigate to="/client/login" replace />
+  if (isBdToken) return null
 
   const logout = () => {
     localStorage.removeItem(TOKEN_CLIENT)
@@ -365,10 +371,15 @@ export default function ClientPortal() {
     if (!contactForm.name.trim()) { setError('Name is required'); return }
     setSaving(true)
     try {
+      const payload = {
+        ...contactForm,
+        type: String(contactForm.type || '').trim().toLowerCase(),
+        status: String(contactForm.status || '').trim().toLowerCase(),
+      }
       if (contactModal.mode === 'add') {
-        await api('/api/client/contacts', { token, method: 'POST', body: contactForm })
+        await api('/api/client/contacts', { token, method: 'POST', body: payload })
       } else {
-        await api(`/api/client/contacts/${contactModal.item.id}`, { token, method: 'PATCH', body: contactForm })
+        await api(`/api/client/contacts/${contactModal.item.id}`, { token, method: 'PATCH', body: payload })
       }
       await loadTabCollection('contacts')
       closeContactModal()
@@ -802,12 +813,29 @@ export default function ClientPortal() {
             { key: 'status', label: 'Status', kind: 'badge' },
           ])}
           {!bootLoading && !tabLoading && active === 'contacts' && (() => {
-            const rows = lists.contacts || []
+            const rows = [...(lists.contacts || [])].reverse()
             const typeColors = {
               client: 'bg-orange-100 text-orange-600',
               lead: 'bg-blue-100 text-blue-700',
               partner: 'bg-amber-100 text-amber-700',
+              server: 'bg-violet-100 text-violet-700',
+              both: 'bg-cyan-100 text-cyan-700',
+              'in-house': 'bg-emerald-100 text-emerald-700',
+              venture: 'bg-pink-100 text-pink-700',
+              startups: 'bg-yellow-100 text-yellow-700',
+              business: 'bg-indigo-100 text-indigo-700',
             }
+            const tabFiltered = contactTab === 'all' ? rows
+              : contactTab === 'new' ? rows.filter(r => r.status === 'new')
+              : rows.filter(r => (r.type || '').toLowerCase() === contactTab)
+            const filteredRows = contactSearch.trim()
+              ? tabFiltered.filter(r =>
+                  (r.name || '').toLowerCase().includes(contactSearch.toLowerCase()) ||
+                  (r.company || '').toLowerCase().includes(contactSearch.toLowerCase()) ||
+                  (r.email || '').toLowerCase().includes(contactSearch.toLowerCase()) ||
+                  (r.mobile || '').includes(contactSearch)
+                )
+              : tabFiltered
             return (
               <div className="space-y-5">
                 <div className="flex items-center justify-between">
@@ -823,9 +851,9 @@ export default function ClientPortal() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { label: 'Total', value: rows.length, color: 'text-slate-900' },
-                    { label: 'Clients', value: rows.filter(r => r.type === 'client').length, color: 'text-orange-600' },
-                    { label: 'Leads', value: rows.filter(r => r.type === 'lead').length, color: 'text-blue-700' },
-                    { label: 'Active', value: rows.filter(r => r.status === 'active').length, color: 'text-emerald-700' },
+                    { label: 'Clients', value: rows.filter(r => String(r.type||'').toLowerCase() === 'client').length, color: 'text-orange-600' },
+                    { label: 'Leads', value: rows.filter(r => String(r.type||'').toLowerCase() === 'lead').length, color: 'text-blue-700' },
+                    { label: 'Active', value: rows.filter(r => String(r.status||'').toLowerCase() === 'active').length, color: 'text-emerald-700' },
                   ].map(s => (
                     <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                       <p className="text-xs text-slate-500">{s.label}</p>
@@ -835,57 +863,99 @@ export default function ClientPortal() {
                 </div>
 
                 <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                  {/* Filter Tabs */}
+                  <div className="flex items-center justify-between px-4 pt-3 pb-0 border-b border-slate-200">
+                    <div className="flex gap-1">
+                      {[
+                        { key: 'all',       label: 'All',       count: rows.length },
+                        { key: 'in-house',  label: 'In-house',  count: rows.filter(r => (r.type||'').toLowerCase() === 'in-house').length },
+                        { key: 'client',    label: 'Client',    count: rows.filter(r => (r.type||'').toLowerCase() === 'client').length },
+                        { key: 'server',    label: 'Server',    count: rows.filter(r => (r.type||'').toLowerCase() === 'server').length },
+                        { key: 'both',      label: 'Both',      count: rows.filter(r => (r.type||'').toLowerCase() === 'both').length },
+                        { key: 'venture',   label: 'Venture',   count: rows.filter(r => (r.type||'').toLowerCase() === 'venture').length },
+                        { key: 'startups',  label: 'Startups',  count: rows.filter(r => (r.type||'').toLowerCase() === 'startups').length },
+                        { key: 'business',  label: 'Business',  count: rows.filter(r => (r.type||'').toLowerCase() === 'business').length },
+                      ].map(tab => (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => setContactTab(tab.key)}
+                          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                            contactTab === tab.key
+                              ? 'border-orange-500 text-orange-500'
+                              : 'border-transparent text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          {tab.label} <span className="ml-1 text-xs text-slate-400">({tab.count})</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="relative mb-1">
+                      <input
+                        type="text"
+                        placeholder="Search clients…"
+                        value={contactSearch}
+                        onChange={e => setContactSearch(e.target.value)}
+                        className="border border-slate-200 rounded-lg pl-3 pr-8 py-1.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 w-56"
+                      />
+                      {contactSearch && (
+                        <button type="button" onClick={() => setContactSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">✕</button>
+                      )}
+                    </div>
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
                           {['#', 'Logo', 'Name', 'Category', 'Email', 'Mobile', 'Type', 'Status', 'Login', 'Settings'].map(h => (
-                            <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">{h}</th>
+                            <th key={h} className="px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-slate-500 whitespace-nowrap">{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {rows.length === 0 ? (
-                          <tr><td colSpan={10} className="px-6 py-12 text-center text-sm text-slate-400">No clients yet. Click "Add Client" to get started.</td></tr>
-                        ) : rows.map((r, idx) => (
+                        {filteredRows.length === 0 ? (
+                          <tr><td colSpan={10} className="px-6 py-12 text-center text-sm text-slate-400">No clients found.</td></tr>
+                        ) : filteredRows.map((r, idx) => (
                           <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
-                            <td className="px-4 py-3 text-sm text-slate-400">{idx + 1}</td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-2.5 text-sm text-slate-400 whitespace-nowrap">{idx + 1}</td>
+                            <td className="px-3 py-2.5">
                               {r.logoUrl
-                                ? <img src={r.logoUrl} alt="logo" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
-                                : <div className="w-10 h-10 rounded-full bg-orange-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
+                                ? <img src={r.logoUrl} alt="logo" className="w-8 h-8 rounded-full object-cover border border-slate-200" />
+                                : <div className="w-8 h-8 rounded-full bg-orange-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
                                     <span className="text-orange-600 text-xs font-bold">{(r.name || '?').slice(0,2).toUpperCase()}</span>
                                   </div>
                               }
                             </td>
-                            <td className="px-4 py-3">
-                              <p className="text-sm font-medium text-slate-800">{r.name}</p>
-                              <p className="text-xs text-slate-400">{r.company || '—'}</p>
+                            <td className="px-3 py-2.5 max-w-[140px]">
+                              <p className="text-sm font-medium text-slate-800 truncate">{r.name}</p>
+                              <p className="text-xs text-slate-400 truncate">{r.company || '—'}</p>
                             </td>
-                            <td className="px-4 py-3">
-                              <p className="text-sm text-slate-700">{r.category || '—'}</p>
-                              <p className="text-xs text-slate-400">{r.subCategory || ''}</p>
+                            <td className="px-3 py-2.5 max-w-[110px]">
+                              <p className="text-xs text-slate-700 truncate">{r.category || '—'}</p>
+                              <p className="text-xs text-slate-400 truncate">{r.subCategory || ''}</p>
                             </td>
-                            <td className="px-4 py-3 text-sm text-slate-600">{r.email || '—'}</td>
-                            <td className="px-4 py-3 text-sm text-slate-600">{r.mobile || '—'}</td>
-                            <td className="px-4 py-3">
-                              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${typeColors[r.type] || 'bg-slate-100 text-slate-600'}`}>{r.type || '—'}</span>
+                            <td className="px-3 py-2.5 max-w-[150px]">
+                              <p className="text-xs text-slate-600 truncate">{r.email || '—'}</p>
                             </td>
-                            <td className="px-4 py-3">
-                              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${pill(r.status)}`}>{r.status || '—'}</span>
+                            <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">{r.mobile || '—'}</td>
+                            <td className="px-3 py-2.5">
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${typeColors[(r.type||'').toLowerCase()] || 'bg-slate-100 text-slate-600'}`}>{r.type || '—'}</span>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-2.5">
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${pill(r.status)}`}>{r.status || '—'}</span>
+                            </td>
+                            <td className="px-3 py-2.5">
                               <button type="button" onClick={async () => {
                                 try {
                                   const res = await api(`/api/client/contacts/${r.id}/login`, { token, method: 'POST' })
                                   localStorage.setItem(TOKEN_SUBCLIENT, res.token)
                                   window.open('/client/dashboard', '_blank')
                                 } catch (err) { setError(err.message || 'No login account linked') }
-                              }} className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
+                              }} className="text-xs font-medium px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors whitespace-nowrap">
                                 Login
                               </button>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-2.5">
                               <div className="relative">
                                 <button
                                   type="button"
@@ -1220,14 +1290,28 @@ export default function ClientPortal() {
                 <div className="grid grid-cols-3 gap-2.5">
                   <div>
                     <label className="block text-xs text-slate-600 mb-1">Type</label>
-                    <select value={contactForm.type} onChange={e => setContactForm(p => ({ ...p, type: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
-                      {['client','lead','partner'].map(o => <option key={o} value={o}>{o}</option>)}
+                    <select value={String(contactForm.type || '').toLowerCase()} onChange={e => setContactForm(p => ({ ...p, type: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
+                      {[
+                        { v: 'client', label: 'Client' },
+                        { v: 'server', label: 'Server' },
+                        { v: 'both', label: 'Both' },
+                        { v: 'in-house', label: 'In-house' },
+                        { v: 'venture', label: 'Venture' },
+                        { v: 'startups', label: 'Startups' },
+                        { v: 'business', label: 'Business' },
+                        { v: 'lead', label: 'Lead' },
+                        { v: 'partner', label: 'Partner' },
+                      ].map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs text-slate-600 mb-1">Status</label>
-                    <select value={contactForm.status} onChange={e => setContactForm(p => ({ ...p, status: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
-                      {['active','inactive'].map(o => <option key={o} value={o}>{o}</option>)}
+                    <select value={String(contactForm.status || '').toLowerCase()} onChange={e => setContactForm(p => ({ ...p, status: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
+                      {[
+                        { v: 'active', label: 'Active' },
+                        { v: 'inactive', label: 'Inactive' },
+                        { v: 'new', label: 'New' },
+                      ].map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
                     </select>
                   </div>
                   <div className="col-span-3">
@@ -1323,6 +1407,8 @@ export default function ClientPortal() {
     </div>
   )
 }
+
+
 
 
 
