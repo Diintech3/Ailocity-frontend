@@ -120,7 +120,7 @@ const BLANK_CONTACT = {
   websiteUrl: '', gstNumber: '', panNumber: '',
   address: '', city: '', state: '', pincode: '', country: 'India',
   instagramUrl: '', facebookUrl: '', youtubeUrl: '', logoKey: '',
-  type: 'client', status: 'active', notes: '', password: '',
+  type: 'client', status: 'active', notes: '', password: '', mbcSubCategory: '',
 }
 
 const FIELD_MAP = {
@@ -242,6 +242,7 @@ export default function ClientPortal() {
   const [contactViewItem, setContactViewItem] = useState(null)
   const [contactTab, setContactTab] = useState('all')
   const [contactSearch, setContactSearch] = useState('')
+  const [contactKycLoading, setContactKycLoading] = useState(null)
 
   const isBdToken = useMemo(() => {
     if (!token) return false
@@ -738,35 +739,141 @@ export default function ClientPortal() {
           )}
 
           {!bootLoading && !tabLoading && active === 'profile' && (
-            <form onSubmit={saveProfile} className="max-w-4xl rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="mb-4 text-xl font-semibold text-slate-900">Profile Details</h2>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {[
-                  ['businessName', 'Business Name'],
-                  ['fullName', 'Full Name'],
-                  ['email', 'Email'],
-                  ['mobile', 'Mobile'],
-                  ['websiteUrl', 'Website URL'],
-                  ['gstNumber', 'GST Number'],
-                  ['panNumber', 'PAN Number'],
-                  ['address', 'Address'],
-                  ['city', 'City'],
-                  ['pincode', 'Pincode'],
-                ].map(([k, label]) => (
-                  <div key={k}>
-                    <label className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
-                    <input
-                      value={profile[k]}
-                      onChange={(e) => setProfile((p) => ({ ...p, [k]: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-orange-500"
-                    />
+            <div className="max-w-5xl space-y-6">
+              {/* Profile Header */}
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-orange-600 text-white text-2xl font-bold shadow-lg">
+                    {(me?.businessName || 'B').slice(0, 2).toUpperCase()}
                   </div>
-                ))}
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900">{me?.businessName || '—'}</h2>
+                    <p className="text-sm text-slate-500 mt-1">{me?.email || '—'}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className={`rounded-full px-3 py-1 text-xs font-medium ${pill(me?.status)}`}>{me?.status || '—'}</span>
+                      <span className={`rounded-full px-3 py-1 text-xs font-medium ${me?.kyc === 'verified' ? 'bg-emerald-100 text-emerald-700' : me?.kyc === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>KYC: {me?.kyc || 'pending'}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <button type="submit" disabled={saving} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#FF7A00] to-[#FFB000] px-4 py-2 text-sm font-medium text-white hover:from-[#e06e00] hover:to-[#e6a000] disabled:opacity-60">
-                <Save size={16} /> Save Profile
-              </button>
-            </form>
+
+              {/* Business Information */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-4">
+                  <h3 className="text-lg font-semibold text-slate-900">Business Information</h3>
+                </div>
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    ['Business Name', me?.businessName],
+                    ['Full Name', me?.fullName],
+                    ['App', me?.appName],
+                    ['Source', me?.source],
+                    ['Owner', me?.owner],
+                  ].map(([label, value]) => (
+                    <div key={label} className="bg-slate-50 rounded-lg px-4 py-3">
+                      <p className="text-xs font-medium text-slate-500 mb-1">{label}</p>
+                      <p className="text-sm font-semibold text-slate-900">{value || '—'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Contact Details */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-4">
+                  <h3 className="text-lg font-semibold text-slate-900">Contact Details</h3>
+                </div>
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    ['Email', me?.email],
+                    ['Mobile', me?.mobile],
+                    ['Website', me?.websiteUrl],
+                    ['Address', me?.address],
+                    ['City', me?.city],
+                    ['Pincode', me?.pincode],
+                  ].map(([label, value]) => (
+                    <div key={label} className="bg-slate-50 rounded-lg px-4 py-3">
+                      <p className="text-xs font-medium text-slate-500 mb-1">{label}</p>
+                      <p className="text-sm font-semibold text-slate-900">{value || '—'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Account & Compliance */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-4">
+                  <h3 className="text-lg font-semibold text-slate-900">Account &amp; Compliance</h3>
+                </div>
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    ['GST Number', me?.gstNumber],
+                    ['PAN Number', me?.panNumber],
+                    ['KYC Status', me?.kyc],
+                    ['Status', me?.status],
+                  ].map(([label, value]) => (
+                    <div key={label} className="bg-slate-50 rounded-lg px-4 py-3">
+                      <p className="text-xs font-medium text-slate-500 mb-1">{label}</p>
+                      <p className="text-sm font-semibold text-slate-900">{value || '—'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Credits & Usage */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-4">
+                  <h3 className="text-lg font-semibold text-slate-900">Credits &amp; Usage</h3>
+                </div>
+                <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[
+                    ['Available Credits', me?.creditsBalance ?? 0],
+                    ['Total Calls', me?.totalCalls ?? 0],
+                    ['Active Agents', me?.activeAgentsCount ?? 0],
+                  ].map(([label, value]) => (
+                    <div key={label} className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg px-4 py-3 border border-orange-200">
+                      <p className="text-xs font-medium text-orange-700 mb-1">{label}</p>
+                      <p className="text-2xl font-bold text-orange-900">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Edit Profile Form */}
+              <form onSubmit={saveProfile} className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-4">
+                  <h3 className="text-lg font-semibold text-slate-900">Edit Profile</h3>
+                </div>
+                <div className="p-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {[
+                    ['businessName', 'Business Name'],
+                    ['fullName', 'Full Name'],
+                    ['email', 'Email'],
+                    ['mobile', 'Mobile'],
+                    ['websiteUrl', 'Website URL'],
+                    ['gstNumber', 'GST Number'],
+                    ['panNumber', 'PAN Number'],
+                    ['address', 'Address'],
+                    ['city', 'City'],
+                    ['pincode', 'Pincode'],
+                  ].map(([k, label]) => (
+                    <div key={k}>
+                      <label className="mb-1 block text-xs font-medium text-slate-700">{label}</label>
+                      <input
+                        value={profile[k]}
+                        onChange={(e) => setProfile((p) => ({ ...p, [k]: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-slate-200 px-6 py-4 flex justify-end">
+                  <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#FF7A00] to-[#FFB000] px-5 py-2.5 text-sm font-medium text-white hover:from-[#e06e00] hover:to-[#e6a000] disabled:opacity-60 shadow-sm">
+                    <Save size={16} /> {saving ? 'Saving...' : 'Save Profile'}
+                  </button>
+                </div>
+              </form>
+            </div>
           )}
 
           {!bootLoading && !tabLoading && active === 'agents' && (
@@ -815,15 +922,9 @@ export default function ClientPortal() {
           {!bootLoading && !tabLoading && active === 'contacts' && (() => {
             const rows = [...(lists.contacts || [])].reverse()
             const typeColors = {
-              client: 'bg-orange-100 text-orange-600',
-              lead: 'bg-blue-100 text-blue-700',
-              partner: 'bg-amber-100 text-amber-700',
-              server: 'bg-violet-100 text-violet-700',
-              both: 'bg-cyan-100 text-cyan-700',
-              'in-house': 'bg-emerald-100 text-emerald-700',
-              venture: 'bg-pink-100 text-pink-700',
-              startups: 'bg-yellow-100 text-yellow-700',
-              business: 'bg-indigo-100 text-indigo-700',
+              client:           'bg-orange-100 text-orange-600',
+              server:           'bg-violet-100 text-violet-700',
+              'server & client':'bg-cyan-100 text-cyan-700',
             }
             const tabFiltered = contactTab === 'all' ? rows
               : contactTab === 'new' ? rows.filter(r => r.status === 'new')
@@ -848,12 +949,13 @@ export default function ClientPortal() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                   {[
-                    { label: 'Total', value: rows.length, color: 'text-slate-900' },
-                    { label: 'Clients', value: rows.filter(r => String(r.type||'').toLowerCase() === 'client').length, color: 'text-orange-600' },
-                    { label: 'Leads', value: rows.filter(r => String(r.type||'').toLowerCase() === 'lead').length, color: 'text-blue-700' },
-                    { label: 'Active', value: rows.filter(r => String(r.status||'').toLowerCase() === 'active').length, color: 'text-emerald-700' },
+                    { label: 'Total',            value: rows.length,                                                                                    color: 'text-slate-900' },
+                    { label: 'Clients',          value: rows.filter(r => String(r.type||'').toLowerCase() === 'client').length,                         color: 'text-orange-600' },
+                    { label: 'Server',           value: rows.filter(r => String(r.type||'').toLowerCase() === 'server').length,                         color: 'text-violet-700' },
+                    { label: 'Server & Client',  value: rows.filter(r => String(r.type||'').toLowerCase() === 'server & client').length,                color: 'text-cyan-700' },
+                    { label: 'Active',           value: rows.filter(r => String(r.status||'').toLowerCase() === 'active').length,                       color: 'text-emerald-700' },
                   ].map(s => (
                     <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                       <p className="text-xs text-slate-500">{s.label}</p>
@@ -867,14 +969,10 @@ export default function ClientPortal() {
                   <div className="flex items-center justify-between px-4 pt-3 pb-0 border-b border-slate-200">
                     <div className="flex gap-1">
                       {[
-                        { key: 'all',       label: 'All',       count: rows.length },
-                        { key: 'in-house',  label: 'In-house',  count: rows.filter(r => (r.type||'').toLowerCase() === 'in-house').length },
-                        { key: 'client',    label: 'Client',    count: rows.filter(r => (r.type||'').toLowerCase() === 'client').length },
-                        { key: 'server',    label: 'Server',    count: rows.filter(r => (r.type||'').toLowerCase() === 'server').length },
-                        { key: 'both',      label: 'Both',      count: rows.filter(r => (r.type||'').toLowerCase() === 'both').length },
-                        { key: 'venture',   label: 'Venture',   count: rows.filter(r => (r.type||'').toLowerCase() === 'venture').length },
-                        { key: 'startups',  label: 'Startups',  count: rows.filter(r => (r.type||'').toLowerCase() === 'startups').length },
-                        { key: 'business',  label: 'Business',  count: rows.filter(r => (r.type||'').toLowerCase() === 'business').length },
+                        { key: 'all',             label: 'All',            count: rows.length },
+                        { key: 'client',          label: 'Client',         count: rows.filter(r => (r.type||'').toLowerCase() === 'client').length },
+                        { key: 'server',          label: 'Server',         count: rows.filter(r => (r.type||'').toLowerCase() === 'server').length },
+                        { key: 'server & client', label: 'Server & Client',count: rows.filter(r => (r.type||'').toLowerCase() === 'server & client').length },
                       ].map(tab => (
                         <button
                           key={tab.key}
@@ -1133,12 +1231,48 @@ export default function ClientPortal() {
                   <p className="text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2">{contactViewItem.notes}</p>
                 </div>
               )}
+
+              {/* KYC Status */}
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">KYC Status</p>
+                <div className="flex items-center gap-3">
+                  <span className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize ${
+                    contactViewItem.kyc === 'verified' ? 'bg-emerald-100 text-emerald-700' :
+                    contactViewItem.kyc === 'rejected' ? 'bg-red-100 text-red-700' :
+                    'bg-amber-100 text-amber-700'
+                  }`}>
+                    {contactViewItem.kyc || 'pending'}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* Footer */}
             <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
-              <button type="button" onClick={() => { setContactViewItem(null); openContactEdit(contactViewItem) }} className="rounded-lg bg-gradient-to-r from-[#FF7A00] to-[#FFB000] px-4 py-1.5 text-sm font-medium text-white hover:from-[#e06e00] hover:to-[#e6a000]">Edit</button>
-              <button type="button" onClick={() => setContactViewItem(null)} className="rounded-lg border border-slate-200 px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50">Close</button>
+              <button type="button" disabled={contactKycLoading !== null} onClick={async () => {
+                try {
+                  setContactKycLoading('verified')
+                  await api(`/api/client/contacts/${contactViewItem.id}/kyc`, { token, method: 'PATCH', body: { kyc: 'verified' } })
+                  await loadTabCollection('contacts')
+                  setContactViewItem(prev => ({ ...prev, kyc: 'verified' }))
+                } catch (err) { setError(err.message || 'KYC update failed') }
+                finally { setContactKycLoading(null) }
+              }} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 px-4 py-1.5 text-sm font-medium text-white">
+                {contactKycLoading === 'verified' ? <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : '✓'} Verify KYC
+              </button>
+              <button type="button" disabled={contactKycLoading !== null} onClick={async () => {
+                try {
+                  setContactKycLoading('rejected')
+                  await api(`/api/client/contacts/${contactViewItem.id}/kyc`, { token, method: 'PATCH', body: { kyc: 'rejected' } })
+                  await loadTabCollection('contacts')
+                  setContactViewItem(prev => ({ ...prev, kyc: 'rejected' }))
+                } catch (err) { setError(err.message || 'KYC update failed') }
+                finally { setContactKycLoading(null) }
+              }} className="inline-flex items-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-60 px-4 py-1.5 text-sm font-medium text-white">
+                {contactKycLoading === 'rejected' ? <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : '✗'} Reject KYC
+              </button>
+              <button type="button" disabled={contactKycLoading !== null} onClick={() => { setContactViewItem(null); openContactEdit(contactViewItem) }} className="rounded-lg bg-gradient-to-r from-[#FF7A00] to-[#FFB000] px-4 py-1.5 text-sm font-medium text-white hover:from-[#e06e00] hover:to-[#e6a000] disabled:opacity-60">Edit</button>
+              <button type="button" disabled={contactKycLoading !== null} onClick={() => setContactViewItem(null)} className="rounded-lg border border-slate-200 px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60">Close</button>
             </div>
           </div>
         </div>
@@ -1289,19 +1423,20 @@ export default function ClientPortal() {
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2.5">CRM Details</p>
                 <div className="grid grid-cols-3 gap-2.5">
                   <div>
-                    <label className="block text-xs text-slate-600 mb-1">Type</label>
+                    <label className="block text-xs text-slate-600 mb-1">Major Business Category (MBC)</label>
                     <select value={String(contactForm.type || '').toLowerCase()} onChange={e => setContactForm(p => ({ ...p, type: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
                       {[
-                        { v: 'client', label: 'Client' },
-                        { v: 'server', label: 'Server' },
-                        { v: 'both', label: 'Both' },
-                        { v: 'in-house', label: 'In-house' },
-                        { v: 'venture', label: 'Venture' },
-                        { v: 'startups', label: 'Startups' },
-                        { v: 'business', label: 'Business' },
-                        { v: 'lead', label: 'Lead' },
-                        { v: 'partner', label: 'Partner' },
+                        { v: 'client',          label: 'Client' },
+                        { v: 'server',          label: 'Server' },
+                        { v: 'server & client', label: 'Server & Client' },
                       ].map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-600 mb-1">MBC Sub Category</label>
+                    <select value={contactForm.mbcSubCategory || ''} onChange={e => setContactForm(p => ({ ...p, mbcSubCategory: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
+                      <option value="">Select sub category</option>
+                      {['Startup - Inhouse','Startup - Outside','MSME','Big Enterprise','PSU','Others'].map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </div>
                   <div>

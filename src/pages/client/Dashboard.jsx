@@ -142,6 +142,25 @@ export default function ClientDashboard() {
   const [dropOpen, setDropOpen] = useState(false)
   const dropRef = useRef(null)
   const [settingsTab, setSettingsTab] = useState('vectorise')
+  const [profileTab, setProfileTab] = useState('profile')
+  const [dsModal, setDsModal] = useState(false)
+  const [dsForm, setDsForm] = useState({ type: '', title: '', description: '', websiteUrl: '', fileKey: '', fileName: '', uploading: false })
+  const [dsSaving, setDsSaving] = useState(false)
+  const [dsFilter, setDsFilter] = useState('All')
+  const [productModal, setProductModal] = useState(false)
+  const [productForm, setProductForm] = useState({ name: '', description: '', category: '', price: '', status: 'active', imageKey: '', imageName: '', uploading: false })
+  const [productSaving, setProductSaving] = useState(false)
+  const [productEditId, setProductEditId] = useState(null)
+  const [productViewModal, setProductViewModal] = useState(false)
+  const [productViewData, setProductViewData] = useState(null)
+  const [serviceModal, setServiceModal] = useState(false)
+  const [serviceForm, setServiceForm] = useState({ name: '', description: '', price: '', status: 'active' })
+  const [serviceSaving, setServiceSaving] = useState(false)
+  const [serviceEditId, setServiceEditId] = useState(null)
+  const [serviceViewModal, setServiceViewModal] = useState(false)
+  const [serviceViewData, setServiceViewData] = useState(null)
+  const [productDropdown, setProductDropdown] = useState(null)
+  const [serviceDropdown, setServiceDropdown] = useState(null)
 
   useEffect(() => {
     const h = (e) => { if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false) }
@@ -149,14 +168,28 @@ export default function ClientDashboard() {
     return () => document.removeEventListener('mousedown', h)
   }, [])
 
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.dropdown-container')) {
+        setProductDropdown(null)
+        setServiceDropdown(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const load = useCallback(async () => {
-    const [meRes, dashRes, creditsRes] = await Promise.all([
+    const [meRes, dashRes, creditsRes, datastoreRes, productsRes, servicesRes] = await Promise.all([
       api('/api/client/me', { token }),
       api('/api/client/dashboard', { token }),
       api('/api/client/credits', { token }),
+      api('/api/client/datastore', { token }),
+      api('/api/client/products', { token }),
+      api('/api/client/services', { token }),
     ])
     setMe(meRes)
-    setDash(dashRes)
+    setDash({ ...dashRes, datastore: datastoreRes.items || [], products: productsRes.products || [], services: servicesRes.services || [] })
     setCredits(creditsRes)
   }, [token])
 
@@ -410,27 +443,753 @@ export default function ClientDashboard() {
             </div>
           )}
 
+          {/* Business - Products */}
+          {!loading && active === 'business-products' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Products</h2>
+                  <p className="text-slate-500 text-sm mt-1">{(dash?.products || []).length} products</p>
+                </div>
+                <button type="button" onClick={() => { setProductForm({ name: '', description: '', category: '', price: '', status: 'active', imageKey: '', imageName: '', uploading: false }); setProductEditId(null); setProductModal(true) }}
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm"
+                  style={{background:'linear-gradient(135deg,#FF7A00,#FFB000)'}}>+ Add Product</button>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      {['#', 'Image', 'Product Name', 'Category', 'Price', 'Status', 'Actions'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(dash?.products || []).length === 0 ? (
+                      <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-400">No products yet. Add your first product to get started.</td></tr>
+                    ) : (dash?.products || []).map((p, idx) => (
+                      <tr key={p.id} className="hover:bg-slate-50/70">
+                        <td className="px-4 py-3 text-sm text-slate-400">{idx + 1}</td>
+                        <td className="px-4 py-3">
+                          {p.imageUrl ? (
+                            <img src={p.imageUrl} alt={p.name} className="w-12 h-12 rounded-lg object-cover border border-slate-200" />
+                          ) : (
+                            <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center">
+                              <Package size={20} className="text-slate-400" />
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm font-medium text-slate-800">{p.name || '—'}</p>
+                          {p.description && <p className="text-xs text-slate-500 mt-0.5 truncate max-w-[200px]">{p.description}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{p.category || '—'}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-slate-900">{p.price || '—'}</td>
+                        <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${pill(p.status)}`}>{p.status || 'active'}</span></td>
+                        <td className="px-4 py-3">
+                          <div className="relative dropdown-container">
+                            <button onClick={(e) => { e.stopPropagation(); setProductDropdown(productDropdown === p.id ? null : p.id) }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+                              <Settings size={16} />
+                            </button>
+                            {productDropdown === p.id && (
+                              <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-slate-200 rounded-lg shadow-xl z-[100]">
+                                <button onClick={(e) => { e.stopPropagation(); setProductDropdown(null); setProductViewData(p); setProductViewModal(true) }} className="flex items-center gap-2 w-full px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 rounded-t-lg">
+                                  <UserRound size={14} /> View
+                                </button>
+                                <button onClick={(e) => { 
+                                  e.stopPropagation()
+                                  setProductDropdown(null)
+                                  setProductForm({ name: p.name, description: p.description || '', category: p.category || '', price: p.price || '', status: p.status, imageKey: p.imageKey || '', imageName: '', uploading: false })
+                                  setProductEditId(p.id)
+                                  setProductModal(true)
+                                }} className="flex items-center gap-2 w-full px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                  <FileText size={14} /> Edit
+                                </button>
+                                <button onClick={async (e) => {
+                                  e.stopPropagation()
+                                  setProductDropdown(null)
+                                  if (!confirm('Delete ' + p.name + '?')) return
+                                  try {
+                                    await api('/api/client/products/' + p.id, { token, method: 'DELETE' })
+                                    const res = await api('/api/client/products', { token })
+                                    setDash(prev => ({ ...prev, products: res.products || [] }))
+                                  } catch (e) { alert(e.message || 'Delete failed') }
+                                }} className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-600 hover:bg-red-50 rounded-b-lg">
+                                  <X size={14} /> Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                </div>
+              </div>
+
+              {/* Add/Edit Product Modal */}
+              {productModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setProductModal(false)}>
+                  <div className="relative w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+                      <h2 className="text-base font-semibold text-slate-900">{productEditId ? 'Edit Product' : 'Add New Product'}</h2>
+                      <button type="button" onClick={() => setProductModal(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+                    </div>
+                    <div className="px-5 py-4 space-y-3 max-h-[70vh] overflow-y-auto">
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">Product Image</label>
+                        <label className="flex items-center gap-3 cursor-pointer rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 hover:border-orange-400 transition-colors">
+                          {productForm.imageKey ? (
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-lg bg-slate-200 flex items-center justify-center">
+                                <Package size={20} className="text-slate-500" />
+                              </div>
+                              <span className="text-sm text-slate-700 truncate">✓ {productForm.imageName || 'Image uploaded'}</span>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-slate-500">{productForm.uploading ? 'Uploading…' : 'Choose product image'}</span>
+                          )}
+                          <input type="file" accept="image/*" className="hidden" disabled={productForm.uploading} onChange={async e => {
+                            const file = e.target.files?.[0]; if (!file) return
+                            setProductForm(p => ({...p, uploading: true}))
+                            try {
+                              const fd = new FormData(); fd.append('file', file)
+                              const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/client/upload`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
+                              const data = await res.json()
+                              if (!res.ok) throw new Error(data.error || 'Upload failed')
+                              setProductForm(p => ({...p, imageKey: data.key, imageName: file.name, uploading: false}))
+                            } catch(err) { alert(err.message || 'Upload failed'); setProductForm(p => ({...p, uploading: false})) }
+                          }} />
+                        </label>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">Product Name <span className="text-red-500">*</span></label>
+                        <input value={productForm.name} onChange={e => setProductForm(p => ({...p, name: e.target.value}))} placeholder="Enter product name" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">Category</label>
+                        <input value={productForm.category} onChange={e => setProductForm(p => ({...p, category: e.target.value}))} placeholder="e.g. Electronics, Clothing, Food" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">Price</label>
+                        <input value={productForm.price} onChange={e => setProductForm(p => ({...p, price: e.target.value}))} placeholder="₹ 0.00" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">Description</label>
+                        <textarea value={productForm.description} onChange={e => setProductForm(p => ({...p, description: e.target.value}))} placeholder="Enter product description" rows={4} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 resize-none" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">Status</label>
+                        <select value={productForm.status} onChange={e => setProductForm(p => ({...p, status: e.target.value}))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+                      <button type="button" onClick={() => setProductModal(false)} className="rounded-lg border border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-700 hover:bg-slate-200">Cancel</button>
+                      <button type="button" disabled={productSaving || !productForm.name.trim()} onClick={async () => {
+                        setProductSaving(true)
+                        try {
+                          if (productEditId) {
+                            await api('/api/client/products/' + productEditId, { token, method: 'PATCH', body: {
+                              name: productForm.name.trim(),
+                              description: productForm.description.trim(),
+                              category: productForm.category.trim(),
+                              price: productForm.price.trim(),
+                              status: productForm.status,
+                              imageKey: productForm.imageKey,
+                            }})
+                          } else {
+                            await api('/api/client/products', { token, method: 'POST', body: {
+                              name: productForm.name.trim(),
+                              description: productForm.description.trim(),
+                              category: productForm.category.trim(),
+                              price: productForm.price.trim(),
+                              status: productForm.status,
+                              imageKey: productForm.imageKey,
+                            }})
+                          }
+                          const res = await api('/api/client/products', { token })
+                          setDash(prev => ({ ...prev, products: res.products || [] }))
+                          setProductModal(false)
+                        } catch (e) { alert(e.message || 'Save failed') }
+                        finally { setProductSaving(false) }
+                      }} className="rounded-lg px-5 py-2 text-sm font-medium text-white disabled:opacity-60" style={{background:'linear-gradient(135deg,#FF7A00,#FFB000)'}}>{ productSaving ? 'Saving...' : productEditId ? 'Update Product' : 'Add Product'}</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* View Product Modal */}
+              {productViewModal && productViewData && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setProductViewModal(false)}>
+                  <div className="relative w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+                      <h2 className="text-base font-semibold text-slate-900">Product Details</h2>
+                      <button type="button" onClick={() => setProductViewModal(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+                    </div>
+                    <div className="px-5 py-4 space-y-4">
+                      {productViewData.imageUrl && (
+                        <div className="flex justify-center">
+                          <img src={productViewData.imageUrl} alt={productViewData.name} className="w-32 h-32 rounded-xl object-cover border-2 border-slate-200" />
+                        </div>
+                      )}
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Product Name</p>
+                          <p className="text-base font-bold text-slate-900 mt-1">{productViewData.name}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Category</p>
+                          <p className="text-base font-bold text-slate-900 mt-1">{productViewData.category || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Price</p>
+                          <p className="text-base font-bold text-slate-900 mt-1">{productViewData.price || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Description</p>
+                          <p className="text-sm text-slate-700 mt-1">{productViewData.description || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Status</p>
+                          <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${pill(productViewData.status)}`}>{productViewData.status}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                          <div>
+                            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Created</p>
+                            <p className="text-xs text-slate-700 mt-1">{new Date(productViewData.createdAt).toLocaleDateString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Updated</p>
+                            <p className="text-xs text-slate-700 mt-1">{new Date(productViewData.updatedAt).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+                      <button type="button" onClick={() => setProductViewModal(false)} className="rounded-lg border border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-700 hover:bg-slate-200">Close</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Business - Services */}
+          {!loading && active === 'business-services' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Services</h2>
+                  <p className="text-slate-500 text-sm mt-1">{(dash?.services || []).length} services</p>
+                </div>
+                <button type="button" onClick={() => { setServiceForm({ name: '', description: '', price: '', status: 'active' }); setServiceEditId(null); setServiceModal(true) }}
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm"
+                  style={{background:'linear-gradient(135deg,#FF7A00,#FFB000)'}}>+ Add Service</button>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      {['#', 'Service Name', 'Description', 'Price', 'Status', 'Actions'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(dash?.services || []).length === 0 ? (
+                      <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-400">No services yet. Add your first service to get started.</td></tr>
+                    ) : (dash?.services || []).map((s, idx) => (
+                      <tr key={s.id} className="hover:bg-slate-50/70">
+                        <td className="px-4 py-3 text-sm text-slate-400">{idx + 1}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-slate-800">{s.name || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600 max-w-[200px] truncate">{s.description || '—'}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-slate-900">{s.price || '—'}</td>
+                        <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${pill(s.status)}`}>{s.status || 'active'}</span></td>
+                        <td className="px-4 py-3">
+                          <div className="relative dropdown-container">
+                            <button onClick={(e) => { e.stopPropagation(); setServiceDropdown(serviceDropdown === s.id ? null : s.id) }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+                              <Settings size={16} />
+                            </button>
+                            {serviceDropdown === s.id && (
+                              <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-slate-200 rounded-lg shadow-xl z-[100]">
+                                <button onClick={(e) => { e.stopPropagation(); setServiceDropdown(null); setServiceViewData(s); setServiceViewModal(true) }} className="flex items-center gap-2 w-full px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 rounded-t-lg">
+                                  <UserRound size={14} /> View
+                                </button>
+                                <button onClick={(e) => {
+                                  e.stopPropagation()
+                                  setServiceDropdown(null)
+                                  setServiceForm({ name: s.name, description: s.description || '', price: s.price || '', status: s.status })
+                                  setServiceEditId(s.id)
+                                  setServiceModal(true)
+                                }} className="flex items-center gap-2 w-full px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                                  <FileText size={14} /> Edit
+                                </button>
+                                <button onClick={async (e) => {
+                                  e.stopPropagation()
+                                  setServiceDropdown(null)
+                                  if (!confirm('Delete ' + s.name + '?')) return
+                                  try {
+                                    await api('/api/client/services/' + s.id, { token, method: 'DELETE' })
+                                    const res = await api('/api/client/services', { token })
+                                    setDash(prev => ({ ...prev, services: res.services || [] }))
+                                  } catch (e) { alert(e.message || 'Delete failed') }
+                                }} className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-600 hover:bg-red-50 rounded-b-lg">
+                                  <X size={14} /> Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                </div>
+              </div>
+
+              {/* Add/Edit Service Modal */}
+              {serviceModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setServiceModal(false)}>
+                  <div className="relative w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+                      <h2 className="text-base font-semibold text-slate-900">{serviceEditId ? 'Edit Service' : 'Add New Service'}</h2>
+                      <button type="button" onClick={() => setServiceModal(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+                    </div>
+                    <div className="px-5 py-4 space-y-3">
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">Service Name <span className="text-red-500">*</span></label>
+                        <input value={serviceForm.name} onChange={e => setServiceForm(p => ({...p, name: e.target.value}))} placeholder="Enter service name" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">Price</label>
+                        <input value={serviceForm.price} onChange={e => setServiceForm(p => ({...p, price: e.target.value}))} placeholder="₹ 0.00" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">Description</label>
+                        <textarea value={serviceForm.description} onChange={e => setServiceForm(p => ({...p, description: e.target.value}))} placeholder="Enter service description" rows={4} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 resize-none" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">Status</label>
+                        <select value={serviceForm.status} onChange={e => setServiceForm(p => ({...p, status: e.target.value}))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+                      <button type="button" onClick={() => setServiceModal(false)} className="rounded-lg border border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-700 hover:bg-slate-200">Cancel</button>
+                      <button type="button" disabled={serviceSaving || !serviceForm.name.trim()} onClick={async () => {
+                        setServiceSaving(true)
+                        try {
+                          if (serviceEditId) {
+                            await api('/api/client/services/' + serviceEditId, { token, method: 'PATCH', body: {
+                              name: serviceForm.name.trim(),
+                              description: serviceForm.description.trim(),
+                              price: serviceForm.price.trim(),
+                              status: serviceForm.status,
+                            }})
+                          } else {
+                            await api('/api/client/services', { token, method: 'POST', body: {
+                              name: serviceForm.name.trim(),
+                              description: serviceForm.description.trim(),
+                              price: serviceForm.price.trim(),
+                              status: serviceForm.status,
+                            }})
+                          }
+                          const res = await api('/api/client/services', { token })
+                          setDash(prev => ({ ...prev, services: res.services || [] }))
+                          setServiceModal(false)
+                        } catch (e) { alert(e.message || 'Save failed') }
+                        finally { setServiceSaving(false) }
+                      }} className="rounded-lg px-5 py-2 text-sm font-medium text-white disabled:opacity-60" style={{background:'linear-gradient(135deg,#FF7A00,#FFB000)'}}>{ serviceSaving ? 'Saving...' : serviceEditId ? 'Update Service' : 'Add Service'}</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* View Service Modal */}
+              {serviceViewModal && serviceViewData && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setServiceViewModal(false)}>
+                  <div className="relative w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+                      <h2 className="text-base font-semibold text-slate-900">Service Details</h2>
+                      <button type="button" onClick={() => setServiceViewModal(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+                    </div>
+                    <div className="px-5 py-4 space-y-4">
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Service Name</p>
+                          <p className="text-base font-bold text-slate-900 mt-1">{serviceViewData.name}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Price</p>
+                          <p className="text-base font-bold text-slate-900 mt-1">{serviceViewData.price || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Description</p>
+                          <p className="text-sm text-slate-700 mt-1">{serviceViewData.description || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Status</p>
+                          <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${pill(serviceViewData.status)}`}>{serviceViewData.status}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                          <div>
+                            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Created</p>
+                            <p className="text-xs text-slate-700 mt-1">{new Date(serviceViewData.createdAt).toLocaleDateString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Updated</p>
+                            <p className="text-xs text-slate-700 mt-1">{new Date(serviceViewData.updatedAt).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+                      <button type="button" onClick={() => setServiceViewModal(false)} className="rounded-lg border border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-700 hover:bg-slate-200">Close</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Business - Profile */}
           {!loading && active === 'business-profile' && (
-            <div className="max-w-2xl bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
-              <h2 className="text-lg font-semibold text-slate-900">Business Profile</h2>
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-5">
+
+              {/* Tabs */}
+              <div className="flex gap-1 border-b border-slate-200">
                 {[
-                  ['Business Name', me?.businessName],
-                  ['Full Name', me?.fullName],
-                  ['Email', me?.email],
-                  ['Mobile', me?.mobile],
-                  ['App', me?.appName],
-                  ['Status', me?.status],
-                  ['KYC', me?.kyc],
-                  ['Credits', me?.creditsBalance],
-                ].map(([l, v]) => v !== undefined && v !== '' ? (
-                  <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
-                    <p className="text-xs text-slate-400">{l}</p>
-                    <p className="text-sm font-medium text-slate-800 mt-0.5 capitalize">{String(v)}</p>
-                  </div>
-                ) : null)}
+                  { id: 'profile',   label: 'Business Profile' },
+                  { id: 'datastore', label: 'Data Store' },
+                ].map(t => (
+                  <button key={t.id} type="button" onClick={() => setProfileTab(t.id)}
+                    className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                      profileTab === t.id ? 'border-orange-500 text-orange-500' : 'border-transparent text-slate-500 hover:text-slate-800'
+                    }`}>{t.label}</button>
+                ))}
               </div>
+
+              {/* Business Profile Tab */}
+              {profileTab === 'profile' && (
+              <div className="space-y-5">
+
+                {/* Profile Header Card */}
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                  <div className="p-6">
+                    <div className="flex items-start gap-5">
+                      <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 text-2xl font-bold border border-slate-200">
+                        {(me?.businessName || 'B').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="flex-1">
+                        <h2 className="text-2xl font-bold text-slate-900">{me?.businessName || '—'}</h2>
+                        <p className="text-base text-slate-600 mt-1">{me?.fullName || '—'}</p>
+                        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-slate-600">
+                          <div className="flex items-center gap-2">
+                            <FileText size={16} className="text-slate-400" />
+                            <span>{me?.email || '—'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <PhoneCall size={16} className="text-slate-400" />
+                            <span>{me?.mobile || '—'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Package size={16} className="text-slate-400" />
+                            <span>{me?.appName || '—'}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <span className={`rounded-full px-3 py-1.5 text-xs font-semibold uppercase text-center ${pill(me?.status)}`}>{me?.status || '—'}</span>
+                        <span className={`rounded-full px-3 py-1.5 text-xs font-semibold uppercase text-center ${me?.kyc === 'verified' ? 'bg-emerald-100 text-emerald-700' : me?.kyc === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{me?.kyc || 'pending'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+                {/* Business Info */}
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                  <div className="bg-gradient-to-r from-slate-50 to-slate-100 px-5 py-3.5 border-b border-slate-200">
+                    <p className="text-sm font-bold text-slate-900">Business Information</p>
+                  </div>
+                  <div className="p-5 space-y-3">
+                    {[
+                      { label: 'Business Name', value: me?.businessName, Icon: Briefcase },
+                      { label: 'Full Name',     value: me?.fullName,     Icon: UserRound },
+                      { label: 'App',           value: me?.appName,      Icon: Package },
+                      { label: 'Source',        value: me?.source,       Icon: Radio },
+                      { label: 'Owner',         value: me?.owner,        Icon: Users },
+                    ].map(({ label, value, Icon }) => (
+                      <div key={label} className="flex items-center gap-3 py-2.5 border-b border-slate-100 last:border-0">
+                        <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0">
+                          <Icon size={16} className="text-orange-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</p>
+                          <p className="text-base font-bold text-slate-900 mt-0.5">{value || '—'}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Contact Info */}
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                  <div className="bg-gradient-to-r from-slate-50 to-slate-100 px-5 py-3.5 border-b border-slate-200">
+                    <p className="text-sm font-bold text-slate-900">Contact Details</p>
+                  </div>
+                  <div className="p-5 space-y-3">
+                    {[
+                      { label: 'Email',   value: me?.email,      Icon: FileText },
+                      { label: 'Mobile',  value: me?.mobile,     Icon: PhoneCall },
+                      { label: 'Website', value: me?.websiteUrl, Icon: Share2 },
+                      { label: 'Address', value: me?.address,    Icon: Radio },
+                      { label: 'City',    value: me?.city,       Icon: Landmark },
+                      { label: 'Pincode', value: me?.pincode,    Icon: Receipt },
+                    ].map(({ label, value, Icon }) => (
+                      <div key={label} className="flex items-center gap-3 py-2.5 border-b border-slate-100 last:border-0">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                          <Icon size={16} className="text-blue-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</p>
+                          <p className="text-base font-bold text-slate-900 mt-0.5 break-words">{value || '—'}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Account & Compliance */}
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                  <div className="bg-gradient-to-r from-slate-50 to-slate-100 px-5 py-3.5 border-b border-slate-200">
+                    <p className="text-sm font-bold text-slate-900">Account &amp; Compliance</p>
+                  </div>
+                  <div className="p-5 space-y-3">
+                    {[
+                      { label: 'GST Number', value: me?.gstNumber, Icon: Receipt },
+                      { label: 'PAN Number', value: me?.panNumber, Icon: CreditCard },
+                      { label: 'KYC Status', value: me?.kyc,       Icon: BadgeCheck },
+                      { label: 'Status',     value: me?.status,    Icon: Shield },
+                    ].map(({ label, value, Icon }) => (
+                      <div key={label} className="flex items-center gap-3 py-2.5 border-b border-slate-100 last:border-0">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                          <Icon size={16} className="text-emerald-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</p>
+                          <p className="text-base font-bold text-slate-900 mt-0.5 capitalize">{value || '—'}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Credits */}
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-200 rounded-xl shadow-sm overflow-hidden">
+                  <div className="bg-gradient-to-r from-orange-100 to-orange-200 px-5 py-3.5 border-b border-orange-300">
+                    <p className="text-sm font-bold text-orange-900">Credits &amp; Usage</p>
+                  </div>
+                  <div className="p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-orange-700 uppercase tracking-wide">Available Credits</p>
+                        <p className="text-3xl font-black text-orange-900 mt-1">{(me?.creditsBalance ?? 0).toLocaleString()}</p>
+                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-white/50 flex items-center justify-center">
+                        <CreditCard size={24} className="text-orange-600" />
+                      </div>
+                    </div>
+                    <div className="w-full bg-orange-200 rounded-full h-3">
+                      <div className="h-3 rounded-full" style={{width: me?.creditsBalance > 0 ? '40%' : '0%', background:'linear-gradient(135deg,#FF7A00,#FFB000)'}} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { label: 'Total Calls',   value: me?.totalCalls        ?? 0, Icon: PhoneCall },
+                        { label: 'Active Agents', value: me?.activeAgentsCount ?? 0, Icon: Bot },
+                      ].map(({ label, value, Icon }) => (
+                        <div key={label} className="bg-white rounded-xl px-4 py-3 border-2 border-orange-300 shadow-sm">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="w-6 h-6 rounded-lg bg-orange-50 flex items-center justify-center">
+                              <Icon size={14} className="text-orange-600" />
+                            </div>
+                            <p className="text-xs font-medium text-orange-700 uppercase tracking-wide">{label}</p>
+                          </div>
+                          <p className="text-2xl font-black text-orange-900">{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+              </div>
+              )}
+
+              {/* Data Store Tab */}
+              {profileTab === 'datastore' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-slate-500">{(dash?.datastore || []).length} items</p>
+                    <button type="button" onClick={() => { setDsForm({ type: '', title: '', description: '', websiteUrl: '', fileKey: '', fileName: '', uploading: false }); setDsModal(true) }}
+                      className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm"
+                      style={{background:'linear-gradient(135deg,#FF7A00,#FFB000)'}}>+ Add New Data</button>
+                  </div>
+
+                  {/* Filter Tabs */}
+                  <div className="flex flex-wrap gap-1 border-b border-slate-200">
+                    {['All','Images','Videos','PDFs','URLs','Websites','YouTube','Text','AI Guidelines'].map(t => (
+                      <button key={t} type="button"
+                        onClick={() => setDsFilter(t)}
+                        className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+                          dsFilter === t ? 'border-orange-500 text-orange-500' : 'border-transparent text-slate-500 hover:text-slate-800'
+                        }`}>{t}</button>
+                    ))}
+                  </div>
+
+                  <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          {['#', 'Type', 'Title', 'Description', 'URL / File'].map(h => (
+                            <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {(() => {
+                          const typeMap = { Images: 'File Upload', Videos: 'File Upload', PDFs: 'File Upload', URLs: 'URLs', Websites: 'Website', YouTube: 'Youtube', Text: 'Text', 'AI Guidelines': 'AI Guidelines' }
+                          const filtered = dsFilter === 'All' ? (dash?.datastore || []) : (dash?.datastore || []).filter(f => f.type === typeMap[dsFilter] || f.type === dsFilter)
+                          return filtered.length === 0 ? (
+                            <tr><td colSpan={5} className="px-6 py-12 text-center text-sm text-slate-400">No items found.</td></tr>
+                          ) : filtered.map((f, idx) => (
+                            <tr key={f.id} className="hover:bg-slate-50/70">
+                              <td className="px-4 py-3 text-sm text-slate-400">{idx + 1}</td>
+                              <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-600">{f.type || '—'}</span></td>
+                              <td className="px-4 py-3 text-sm font-medium text-slate-800">{f.title || '—'}</td>
+                              <td className="px-4 py-3 text-sm text-slate-600 max-w-[200px] truncate">{f.description || '—'}</td>
+                              <td className="px-4 py-3 text-sm text-slate-600">
+                                {f.fileUrl ? (
+                                  <div className="flex items-center gap-3">
+                                    {f.mimeType?.startsWith('image/') && (
+                                      <img src={f.fileUrl} alt={f.fileName || 'Image'} className="w-12 h-12 rounded-lg object-cover border border-slate-200" />
+                                    )}
+                                    <a href={f.fileUrl} target="_blank" rel="noreferrer" className="text-orange-500 hover:underline flex items-center gap-1">
+                                      {f.fileName ? (
+                                        <span className="truncate max-w-[120px]">{f.fileName}</span>
+                                      ) : (
+                                        <span>View File</span>
+                                      )}
+                                    </a>
+                                  </div>
+                                ) : f.url ? (
+                                  <a href={f.url} target="_blank" rel="noreferrer" className="text-orange-500 hover:underline truncate block max-w-[160px]">{f.url}</a>
+                                ) : '—'}
+                              </td>
+                            </tr>
+                          ))
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Add Modal */}
+                  {dsModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setDsModal(false)}>
+                      <div className="relative w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+                          <h2 className="text-base font-semibold text-slate-900">Add New Data</h2>
+                          <button type="button" onClick={() => setDsModal(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+                        </div>
+                        <div className="px-5 py-4 space-y-3">
+                          <div>
+                            <label className="block text-xs text-slate-600 mb-1">Item Type</label>
+                            <select value={dsForm.type} onChange={e => setDsForm(p => ({...p, type: e.target.value, websiteUrl: '', fileKey: '', fileName: ''}))} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
+                              <option value="">Select type</option>
+                              {['File Upload','Youtube','Website','URLs','Text','AI Guidelines'].map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-600 mb-1">Title <span className="text-red-500">*</span></label>
+                            <input value={dsForm.title} onChange={e => setDsForm(p => ({...p, title: e.target.value}))} placeholder="Enter title" className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-600 mb-1">Description</label>
+                            <textarea value={dsForm.description} onChange={e => setDsForm(p => ({...p, description: e.target.value}))} placeholder="Enter description" rows={3} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 resize-none" />
+                          </div>
+                          {dsForm.type === 'File Upload' && (
+                            <div>
+                              <label className="block text-xs text-slate-600 mb-1">Upload File</label>
+                              <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 hover:border-orange-400 transition-colors">
+                                <span className="text-sm text-slate-500 truncate">
+                                  {dsForm.uploading ? 'Uploading…' : dsForm.fileKey ? `✓ ${dsForm.fileName}` : 'Choose file'}
+                                </span>
+                                <input type="file" className="hidden" disabled={dsForm.uploading} onChange={async e => {
+                                  const file = e.target.files?.[0]; if (!file) return
+                                  setDsForm(p => ({...p, uploading: true}))
+                                  try {
+                                    const fd = new FormData(); fd.append('file', file)
+                                    const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/client/upload`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
+                                    const data = await res.json()
+                                    if (!res.ok) throw new Error(data.error || 'Upload failed')
+                                    setDsForm(p => ({...p, fileKey: data.key, fileName: file.name, mimeType: file.type, fileSize: file.size, uploading: false}))
+                                  } catch(err) { alert(err.message || 'Upload failed'); setDsForm(p => ({...p, uploading: false})) }
+                                }} />
+                              </label>
+                            </div>
+                          )}
+                          {dsForm.type === 'File Upload' && (
+                            <div>
+                              <label className="block text-xs text-slate-600 mb-1">Website URL</label>
+                              <input value={dsForm.websiteUrl} onChange={e => setDsForm(p => ({...p, websiteUrl: e.target.value}))} placeholder="https://" className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                            </div>
+                          )}
+                          {(dsForm.type === 'Youtube' || dsForm.type === 'Website') && (
+                            <div>
+                              <label className="block text-xs text-slate-600 mb-1">{dsForm.type === 'Youtube' ? 'YouTube URL' : 'Website URL'}</label>
+                              <input value={dsForm.websiteUrl} onChange={e => setDsForm(p => ({...p, websiteUrl: e.target.value}))} placeholder={dsForm.type === 'Youtube' ? 'https://youtube.com/...' : 'https://'} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+                          <button type="button" onClick={() => setDsModal(false)} className="rounded-lg border border-slate-200 bg-slate-100 px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-200">Cancel</button>
+                          <button type="button" disabled={dsSaving || !dsForm.title.trim() || (dsForm.type === 'File Upload' && !dsForm.fileKey)} onClick={async () => {
+                            setDsSaving(true)
+                            try {
+                              await api('/api/client/datastore', { token, method: 'POST', body: {
+                                title: dsForm.title.trim(),
+                                type: dsForm.type,
+                                description: dsForm.description.trim(),
+                                url: dsForm.type === 'File Upload' ? dsForm.websiteUrl.trim() : dsForm.websiteUrl.trim(),
+                                fileKey: dsForm.type === 'File Upload' ? dsForm.fileKey : '',
+                                fileName: dsForm.type === 'File Upload' ? dsForm.fileName : '',
+                                mimeType: dsForm.type === 'File Upload' ? dsForm.mimeType : '',
+                                fileSize: dsForm.type === 'File Upload' ? dsForm.fileSize : 0,
+                              }})
+                              const res = await api('/api/client/datastore', { token })
+                              setDash(prev => ({ ...prev, datastore: res.items || [] }))
+                              setDsModal(false)
+                            } catch (e) { alert(e.message || 'Save failed') }
+                            finally { setDsSaving(false) }
+                          }} className="rounded-lg px-5 py-1.5 text-sm font-medium text-white disabled:opacity-60" style={{background:'linear-gradient(135deg,#FF7A00,#FFB000)'}}>{ dsSaving ? 'Saving...' : 'Add Data'}</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
           )}
 
@@ -602,7 +1361,7 @@ export default function ClientDashboard() {
           )}
 
           {/* Coming Soon for all other tabs */}
-          {!loading && active !== 'overview' && active !== 'business-profile' && (() => {
+          {!loading && active !== 'overview' && active !== 'business-profile' && active !== 'business-products' && active !== 'business-services' && active !== 'tools' && active !== 'ai-credits' && active !== 'ai-tickets' && active !== 'settings' && (() => {
             const allTabs = NAV_SECTIONS.flatMap(s => s.children || [])
             const tab = allTabs.find(t => t.id === active)
             if (!tab) return null
