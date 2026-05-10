@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useNavigate, Navigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   AppWindow,
@@ -19,7 +19,7 @@ import {
   Menu,
   ChevronDown,
 } from 'lucide-react'
-import { api, TOKEN_ADMIN, TOKEN_CLIENT, TOKEN_BD } from '../../lib/api'
+import { api, TOKEN_ADMIN, TOKEN_CLIENT, TOKEN_BD, TOKEN_TC } from '../../lib/api'
 
 function LogoImage({ logoKey, token }) {
   const [url, setUrl] = useState(null)
@@ -153,7 +153,7 @@ export default function AdminDashboard() {
   const [dash, setDash] = useState(null)
   const [clients, setClients] = useState([])
   const [apps, setApps] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!!token)
 
   const refreshData = useCallback(async () => {
     if (!token) return
@@ -198,9 +198,7 @@ export default function AdminDashboard() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  if (!token) {
-    return <Navigate to="/admin/login" replace />
-  }
+  if (!token) return null
 
   const filteredApps = clients.filter((c) => {
     const q = appSearch.toLowerCase()
@@ -324,6 +322,7 @@ export default function AdminDashboard() {
           dealValue: editClient.dealValue || '', nextFollowUp: editClient.nextFollowUp || '',
           notes: editClient.notes || '', agents: editClient.agents,
           status: editClient.status, kyc: editClient.kyc,
+          appId: editClient.appId || '',
         },
       })
       setEditClient(null)
@@ -365,14 +364,14 @@ export default function AdminDashboard() {
         className={`relative flex-shrink-0 flex flex-col transition-all duration-300 ease-in-out overflow-hidden ${
           sidebarOpen ? 'w-64' : 'w-[72px]'
         }`}
-        style={{background:'linear-gradient(180deg,#FF7A00 0%,#cc6200 100%)'}}
+        style={{background:'linear-gradient(180deg,#fff8f0 0%,#fff3e6 100%)',borderRight:'1px solid #ffe0c0'}}
       >
-        <div className="flex items-center border-b border-black/20 px-4" style={{ height: 65 }}>
+        <div className="flex items-center border-b border-orange-200 px-4" style={{ height: 65 }}>
           <img src="/Aliocity logo.jpeg" alt="Ailocity" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
           {sidebarOpen && (
             <div className="ml-3 overflow-hidden">
-              <p className="text-black font-semibold text-sm whitespace-nowrap">Admin Portal</p>
-              <p className="text-black/60 text-xs whitespace-nowrap">Ailocity Platform</p>
+              <p className="text-slate-800 font-semibold text-sm whitespace-nowrap">Admin Portal</p>
+              <p className="text-slate-500 text-xs whitespace-nowrap">Ailocity Platform</p>
             </div>
           )}
         </div>
@@ -392,7 +391,7 @@ export default function AdminDashboard() {
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                   active === id
                     ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-md shadow-orange-500/25'
-                    : 'text-black/70 hover:text-black hover:bg-white/20'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-orange-100'
                 }`}
               >
                 <Icon size={18} className="flex-shrink-0" />
@@ -401,7 +400,7 @@ export default function AdminDashboard() {
             ))}
         </nav>
 
-        <div className="px-3 pb-4 border-t border-black/20 pt-3 space-y-0.5">
+        <div className="px-3 pb-4 border-t border-orange-200 pt-3 space-y-0.5">
           {navItems
             .filter((n) => ['support', 'help', 'settings'].includes(n.id))
             .map(({ icon: Icon, label, id }) => (
@@ -416,7 +415,7 @@ export default function AdminDashboard() {
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                   active === id
                     ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-md shadow-orange-500/25'
-                    : 'text-black/70 hover:text-black hover:bg-white/20'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-orange-100'
                 }`}
               >
                 <Icon size={18} className="flex-shrink-0" />
@@ -509,7 +508,7 @@ export default function AdminDashboard() {
                 <h2 className="text-slate-900 text-xl font-semibold">Apps Management</h2>
                 <button
                   type="button"
-                  onClick={() => setShowForm(true)}
+                  onClick={() => { setShowForm(true); setForm(emptyForm) }}
                   className="bg-gradient-to-r from-[#FF7A00] to-[#FFB000] hover:from-[#e06e00] hover:to-[#e6a000] text-white text-sm px-4 py-2.5 rounded-lg transition-colors font-medium shadow-md shadow-orange-500/20"
                 >
                   + Add New App
@@ -585,13 +584,26 @@ export default function AdminDashboard() {
                                 onClick={async () => {
                                   try {
                                     const res = await api(`/api/admin/apps/${client.id}/impersonate`, { method: 'POST', token })
-                                    // Route to correct dashboard based on appId
+                                    // Route based on client.appId from table (not JWT)
                                     if (client.appId === 'ailocity-bd') {
                                       localStorage.setItem(TOKEN_BD, res.token)
                                       window.open('/bd/dashboard', '_blank')
-                                    } else {
+                                    } else if (client.appId === 'ailocity-tc') {
+                                      localStorage.setItem(TOKEN_TC, res.token)
+                                      window.open('/tc/dashboard', '_blank')
+                                    } else if (client.appId === 'ailocity-business') {
                                       localStorage.setItem(TOKEN_CLIENT, res.token)
                                       window.open('/client/portal', '_blank')
+                                    } else {
+                                      // ailocity or ailocity-tc fallback — check business name
+                                      const isTc = (client.business || '').toLowerCase().includes('tc')
+                                      if (isTc) {
+                                        localStorage.setItem(TOKEN_TC, res.token)
+                                        window.open('/tc/dashboard', '_blank')
+                                      } else {
+                                        localStorage.setItem(TOKEN_CLIENT, res.token)
+                                        window.open('/client/portal', '_blank')
+                                      }
                                     }
                                   } catch (err) {
                                     alert(err.message || 'Login failed')
@@ -859,6 +871,16 @@ export default function AdminDashboard() {
                   <div>
                     <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-2">Account Details</p>
                     <div className="grid grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="block text-xs text-slate-600 mb-1">App</label>
+                        <select
+                          value={editClient.appId ?? ''}
+                          onChange={(e) => setEditClient((p) => ({ ...p, appId: e.target.value }))}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500"
+                        >
+                          {apps.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                      </div>
                       {[
                         { label: 'Source', key: 'source' },
                         { label: 'Owner', key: 'owner' },
@@ -1125,7 +1147,7 @@ export default function AdminDashboard() {
                         type="submit"
                         className="bg-gradient-to-r from-[#FF7A00] to-[#FFB000] hover:from-[#e06e00] hover:to-[#e6a000] text-white px-5 py-1.5 rounded-lg font-medium text-sm transition-colors shadow-md shadow-orange-500/20"
                       >
-                        {active === 'app' ? 'Add App' : 'Add App'}
+                        Add App
                       </button>
                     </div>
                   </div>

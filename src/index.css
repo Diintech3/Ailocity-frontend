@@ -15,9 +15,9 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  color: #ffffff;
+  color: #0f172a;
   font-family: 'Inter', sans-serif;
-  background: #0F172A;
+  background: #f8fafc;
 }
 
 /* Hide scrollbar globally for sidebar */

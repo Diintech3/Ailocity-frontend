@@ -181,12 +181,12 @@ export default function ClientDashboard() {
 
   const load = useCallback(async () => {
     const [meRes, dashRes, creditsRes, datastoreRes, productsRes, servicesRes] = await Promise.all([
-      api('/api/client/me', { token }),
-      api('/api/client/dashboard', { token }),
-      api('/api/client/credits', { token }),
-      api('/api/client/datastore', { token }),
-      api('/api/client/products', { token }),
-      api('/api/client/services', { token }),
+      api('/api/business/me', { token }),
+      api('/api/business/dashboard', { token }),
+      api('/api/business/credits', { token }),
+      api('/api/business/datastore', { token }),
+      api('/api/business/products', { token }),
+      api('/api/business/services', { token }),
     ])
     setMe(meRes)
     setDash({ ...dashRes, datastore: datastoreRes.items || [], products: productsRes.products || [], services: servicesRes.services || [] })
@@ -232,15 +232,15 @@ export default function ClientDashboard() {
       {/* Sidebar */}
       <aside
         className={`flex flex-col transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-[72px]'} flex-shrink-0`}
-        style={{ background: 'linear-gradient(180deg,#FF7A00 0%,#cc6200 100%)' }}
+        style={{ background: 'linear-gradient(180deg,#fff8f0 0%,#fff3e6 100%)', borderRight: '1px solid #ffe0c0' }}
       >
         {/* Brand */}
-        <div className="flex h-[65px] items-center border-b border-black/20 px-3 flex-shrink-0">
+        <div className="flex h-[65px] items-center border-b border-orange-200 px-3 flex-shrink-0">
           <img src="/Aliocity logo.jpeg" alt="Ailocity" className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
           {sidebarOpen && (
             <div className="ml-3 overflow-hidden">
-              <p className="truncate text-sm font-semibold text-black">{me?.businessName || 'Client'}</p>
-              <p className="truncate text-xs text-black/60">{me?.appName || 'Ailocity'} • <span className="capitalize">{me?.status || '—'}</span></p>
+              <p className="truncate text-sm font-semibold text-slate-800">{me?.businessName || 'Client'}</p>
+              <p className="truncate text-xs text-slate-500">{me?.appName || 'Ailocity'} • <span className="capitalize">{me?.status || '—'}</span></p>
             </div>
           )}
         </div>
@@ -257,8 +257,8 @@ export default function ClientDashboard() {
                   title={!sidebarOpen ? section.label : undefined}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
                     active === section.id
-                      ? 'bg-black/20 text-black font-semibold'
-                      : 'text-black/80 hover:bg-black/10'
+                      ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-orange-100'
                   }`}
                 >
                   <section.icon size={18} className="flex-shrink-0" />
@@ -279,8 +279,8 @@ export default function ClientDashboard() {
                   title={!sidebarOpen ? section.label : undefined}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
                     isActiveSection
-                      ? 'bg-black/20 text-black font-semibold'
-                      : 'text-black/80 hover:bg-black/10'
+                      ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-orange-100'
                   }`}
                 >
                   <section.icon size={18} className="flex-shrink-0" />
@@ -294,7 +294,7 @@ export default function ClientDashboard() {
 
                 {/* Sub-tabs */}
                 {sidebarOpen && isOpen && (
-                  <div className="ml-4 mt-0.5 space-y-0.5 border-l-2 border-black/20 pl-3">
+                  <div className="ml-4 mt-0.5 space-y-0.5 border-l-2 border-orange-200 pl-3">
                     {section.children.map((child) => (
                       <button
                         key={child.id}
@@ -302,8 +302,8 @@ export default function ClientDashboard() {
                         onClick={() => setActive(child.id)}
                         className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-all ${
                           active === child.id
-                            ? 'bg-white/30 text-black font-semibold'
-                            : 'text-black/70 hover:bg-black/10'
+                            ? 'bg-orange-100 text-orange-700 font-semibold'
+                            : 'text-slate-500 hover:bg-orange-50'
                         }`}
                       >
                         <child.icon size={15} className="flex-shrink-0" />
@@ -318,7 +318,7 @@ export default function ClientDashboard() {
         </nav>
 
         {/* Bottom tabs - Credits, Tickets, Settings */}
-        <div className="px-2 pb-3 border-t border-black/20 pt-2 flex-shrink-0 space-y-0.5">
+        <div className="px-2 pb-3 border-t border-orange-200 pt-2 flex-shrink-0 space-y-0.5">
           {[
             { id: 'ai-credits', label: 'Credits', icon: CreditCard },
             { id: 'ai-tickets', label: 'Tickets', icon: Ticket },
@@ -330,7 +330,7 @@ export default function ClientDashboard() {
               onClick={() => setActive(tab.id)}
               title={!sidebarOpen ? tab.label : undefined}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
-                active === tab.id ? 'bg-black/20 text-black font-semibold' : 'text-black/80 hover:bg-black/10'
+                active === tab.id ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-sm' : 'text-slate-600 hover:bg-orange-100'
               }`}
             >
               <tab.icon size={18} className="flex-shrink-0" />
@@ -512,8 +512,8 @@ export default function ClientDashboard() {
                                   setProductDropdown(null)
                                   if (!confirm('Delete ' + p.name + '?')) return
                                   try {
-                                    await api('/api/client/products/' + p.id, { token, method: 'DELETE' })
-                                    const res = await api('/api/client/products', { token })
+                                    await api('/api/business/products/' + p.id, { token, method: 'DELETE' })
+                                    const res = await api('/api/business/products', { token })
                                     setDash(prev => ({ ...prev, products: res.products || [] }))
                                   } catch (e) { alert(e.message || 'Delete failed') }
                                 }} className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-600 hover:bg-red-50 rounded-b-lg">
@@ -557,7 +557,7 @@ export default function ClientDashboard() {
                             setProductForm(p => ({...p, uploading: true}))
                             try {
                               const fd = new FormData(); fd.append('file', file)
-                              const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/client/upload`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
+                              const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/business/upload`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
                               const data = await res.json()
                               if (!res.ok) throw new Error(data.error || 'Upload failed')
                               setProductForm(p => ({...p, imageKey: data.key, imageName: file.name, uploading: false}))
@@ -595,7 +595,7 @@ export default function ClientDashboard() {
                         setProductSaving(true)
                         try {
                           if (productEditId) {
-                            await api('/api/client/products/' + productEditId, { token, method: 'PATCH', body: {
+                            await api('/api/business/products/' + productEditId, { token, method: 'PATCH', body: {
                               name: productForm.name.trim(),
                               description: productForm.description.trim(),
                               category: productForm.category.trim(),
@@ -604,7 +604,7 @@ export default function ClientDashboard() {
                               imageKey: productForm.imageKey,
                             }})
                           } else {
-                            await api('/api/client/products', { token, method: 'POST', body: {
+                            await api('/api/business/products', { token, method: 'POST', body: {
                               name: productForm.name.trim(),
                               description: productForm.description.trim(),
                               category: productForm.category.trim(),
@@ -613,7 +613,7 @@ export default function ClientDashboard() {
                               imageKey: productForm.imageKey,
                             }})
                           }
-                          const res = await api('/api/client/products', { token })
+                          const res = await api('/api/business/products', { token })
                           setDash(prev => ({ ...prev, products: res.products || [] }))
                           setProductModal(false)
                         } catch (e) { alert(e.message || 'Save failed') }
@@ -737,8 +737,8 @@ export default function ClientDashboard() {
                                   setServiceDropdown(null)
                                   if (!confirm('Delete ' + s.name + '?')) return
                                   try {
-                                    await api('/api/client/services/' + s.id, { token, method: 'DELETE' })
-                                    const res = await api('/api/client/services', { token })
+                                    await api('/api/business/services/' + s.id, { token, method: 'DELETE' })
+                                    const res = await api('/api/business/services', { token })
                                     setDash(prev => ({ ...prev, services: res.services || [] }))
                                   } catch (e) { alert(e.message || 'Delete failed') }
                                 }} className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-600 hover:bg-red-50 rounded-b-lg">
@@ -790,21 +790,21 @@ export default function ClientDashboard() {
                         setServiceSaving(true)
                         try {
                           if (serviceEditId) {
-                            await api('/api/client/services/' + serviceEditId, { token, method: 'PATCH', body: {
+                            await api('/api/business/services/' + serviceEditId, { token, method: 'PATCH', body: {
                               name: serviceForm.name.trim(),
                               description: serviceForm.description.trim(),
                               price: serviceForm.price.trim(),
                               status: serviceForm.status,
                             }})
                           } else {
-                            await api('/api/client/services', { token, method: 'POST', body: {
+                            await api('/api/business/services', { token, method: 'POST', body: {
                               name: serviceForm.name.trim(),
                               description: serviceForm.description.trim(),
                               price: serviceForm.price.trim(),
                               status: serviceForm.status,
                             }})
                           }
-                          const res = await api('/api/client/services', { token })
+                          const res = await api('/api/business/services', { token })
                           setDash(prev => ({ ...prev, services: res.services || [] }))
                           setServiceModal(false)
                         } catch (e) { alert(e.message || 'Save failed') }
@@ -1140,7 +1140,7 @@ export default function ClientDashboard() {
                                   setDsForm(p => ({...p, uploading: true}))
                                   try {
                                     const fd = new FormData(); fd.append('file', file)
-                                    const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/client/upload`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
+                                    const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/business/upload`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd })
                                     const data = await res.json()
                                     if (!res.ok) throw new Error(data.error || 'Upload failed')
                                     setDsForm(p => ({...p, fileKey: data.key, fileName: file.name, mimeType: file.type, fileSize: file.size, uploading: false}))
@@ -1167,7 +1167,7 @@ export default function ClientDashboard() {
                           <button type="button" disabled={dsSaving || !dsForm.title.trim() || (dsForm.type === 'File Upload' && !dsForm.fileKey)} onClick={async () => {
                             setDsSaving(true)
                             try {
-                              await api('/api/client/datastore', { token, method: 'POST', body: {
+                              await api('/api/business/datastore', { token, method: 'POST', body: {
                                 title: dsForm.title.trim(),
                                 type: dsForm.type,
                                 description: dsForm.description.trim(),
@@ -1177,7 +1177,7 @@ export default function ClientDashboard() {
                                 mimeType: dsForm.type === 'File Upload' ? dsForm.mimeType : '',
                                 fileSize: dsForm.type === 'File Upload' ? dsForm.fileSize : 0,
                               }})
-                              const res = await api('/api/client/datastore', { token })
+                              const res = await api('/api/business/datastore', { token })
                               setDash(prev => ({ ...prev, datastore: res.items || [] }))
                               setDsModal(false)
                             } catch (e) { alert(e.message || 'Save failed') }

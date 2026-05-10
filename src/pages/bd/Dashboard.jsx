@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, UserRound, Settings, LogOut, Menu, X,
   ChevronDown, ChevronRight, CalendarDays, BookOpen,
@@ -47,7 +47,7 @@ export default function BDDashboard() {
   const navigate = useNavigate()
   const [active, setActive] = useState('overview')
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!!token)
   const [me, setMe] = useState(null)
   const [dash, setDash] = useState(null)
   const [dropOpen, setDropOpen] = useState(false)
@@ -103,7 +103,7 @@ export default function BDDashboard() {
     return () => { cancelled = true }
   }, [token, navigate, load])
 
-  if (!token) return <Navigate to="/bd/login" replace />
+  if (!token) return null
 
   const logout = () => {
     localStorage.removeItem(TOKEN_BD)
@@ -120,15 +120,15 @@ export default function BDDashboard() {
       {/* Sidebar */}
       <aside
         className={`flex flex-col flex-shrink-0 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-[72px]'}`}
-        style={{ background: 'linear-gradient(180deg,#FF7A00 0%,#cc6200 100%)' }}
+        style={{ background: 'linear-gradient(180deg,#fff8f0 0%,#fff3e6 100%)', borderRight: '1px solid #ffe0c0' }}
       >
         {/* Brand */}
-        <div className="flex h-[65px] items-center border-b border-black/20 px-3 flex-shrink-0">
+        <div className="flex h-[65px] items-center border-b border-orange-200 px-3 flex-shrink-0">
           <img src="/Aliocity logo.jpeg" alt="Ailocity" className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
           {sidebarOpen && (
             <div className="ml-3 overflow-hidden">
-              <p className="truncate text-sm font-semibold text-black">{me?.businessName || 'BD Partner'}</p>
-              <p className="truncate text-xs text-black/60">Ailocity BD • <span className="capitalize">{me?.status || '—'}</span></p>
+              <p className="truncate text-sm font-semibold text-slate-800">{me?.businessName || 'BD Partner'}</p>
+              <p className="truncate text-xs text-slate-500">Ailocity BD • <span className="capitalize">{me?.status || '—'}</span></p>
             </div>
           )}
         </div>
@@ -142,7 +142,7 @@ export default function BDDashboard() {
               onClick={() => setActive(id)}
               title={!sidebarOpen ? label : undefined}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
-                active === id ? 'bg-black/20 text-black font-semibold' : 'text-black/80 hover:bg-black/10'
+                active === id ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-sm' : 'text-slate-600 hover:bg-orange-100'
               }`}
             >
               <Icon size={18} className="flex-shrink-0" />
@@ -152,7 +152,7 @@ export default function BDDashboard() {
         </nav>
 
         {/* Bottom tabs */}
-        <div className="px-2 pb-3 border-t border-black/20 pt-2 flex-shrink-0 space-y-0.5">
+        <div className="px-2 pb-3 border-t border-orange-200 pt-2 flex-shrink-0 space-y-0.5">
           {BOTTOM_TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -160,7 +160,7 @@ export default function BDDashboard() {
               onClick={() => setActive(id)}
               title={!sidebarOpen ? label : undefined}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
-                active === id ? 'bg-black/20 text-black font-semibold' : 'text-black/80 hover:bg-black/10'
+                active === id ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-sm' : 'text-slate-600 hover:bg-orange-100'
               }`}
             >
               <Icon size={18} className="flex-shrink-0" />

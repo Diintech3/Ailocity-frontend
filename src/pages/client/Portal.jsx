@@ -18,12 +18,36 @@ import {
   UserRound,
   Users,
   X,
+  MapPin,
 } from 'lucide-react'
-import { api, TOKEN_CLIENT, TOKEN_SUBCLIENT, TOKEN_BD } from '../../lib/api'
+import { api, TOKEN_CLIENT, TOKEN_SUBCLIENT, TOKEN_BD, TOKEN_TC } from '../../lib/api'
+
+// Presigned URL se logo dikhata hai — R2 storage ke liye
+function ContactLogo({ logoKey, token, size = 'md' }) {
+  const [url, setUrl] = useState(null)
+  const sz = size === 'lg' ? 'w-12 h-12' : size === 'xl' ? 'w-16 h-16' : 'w-8 h-8'
+  const txt = size === 'lg' ? 'text-sm' : size === 'xl' ? 'text-base' : 'text-xs'
+  useEffect(() => {
+    if (!logoKey) return
+    fetch(`${import.meta.env.VITE_API_URL || ''}/api/business/presigned-url?key=${encodeURIComponent(logoKey)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(d => { if (d.url) setUrl(d.url) })
+      .catch(() => {})
+  }, [logoKey, token])
+  if (!logoKey) return null
+  return url
+    ? <img src={url} alt="logo" className={`${sz} rounded-full object-cover border border-slate-200 flex-shrink-0`} />
+    : <div className={`${sz} rounded-full bg-orange-100 border border-slate-200 flex items-center justify-center flex-shrink-0`}>
+        <span className={`text-orange-600 ${txt} font-bold`}>…</span>
+      </div>
+}
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'contacts', label: 'Clients', icon: Users },
+  { id: 'contacts', label: 'Business', icon: Users },
+  { id: 'territory', label: 'Territory', icon: MapPin },
   { id: 'services', label: 'Services', icon: Settings },
   { id: 'products', label: 'Products', icon: Package },
   { id: 'agents', label: 'AI Agents', icon: Bot },
@@ -36,21 +60,21 @@ const TABS = [
 ]
 
 const ENDPOINTS = {
-  services: '/api/client/services',
-  products: '/api/client/products',
-  contacts: '/api/client/contacts',
-  datastore: '/api/client/datastore',
-  leads: '/api/client/leads',
-  campaigns: '/api/client/campaigns',
-  content: '/api/client/content',
-  reels: '/api/client/reels',
+  services: '/api/business/services',
+  products: '/api/business/products',
+  contacts: '/api/business/contacts',
+  datastore: '/api/business/datastore',
+  leads: '/api/business/leads',
+  campaigns: '/api/business/campaigns',
+  content: '/api/business/content',
+  reels: '/api/business/reels',
 }
 
 const RES_KEYS = {
   services: 'services',
   products: 'products',
   contacts: 'contacts',
-  datastore: 'files',
+  datastore: 'items',
   leads: 'leads',
   campaigns: 'campaigns',
   content: 'content',
@@ -120,7 +144,8 @@ const BLANK_CONTACT = {
   websiteUrl: '', gstNumber: '', panNumber: '',
   address: '', city: '', state: '', pincode: '', country: 'India',
   instagramUrl: '', facebookUrl: '', youtubeUrl: '', logoKey: '',
-  type: 'client', status: 'active', notes: '', password: '', mbcSubCategory: '',
+  type: 'client', status: 'active', kyc: 'pending', notes: '', password: '', mbcSubCategory: '',
+  territory: { stateId: '', stateName: '', cityId: '', cityName: '', regionId: '', regionName: '', podId: '', podNumber: '', podName: '' },
 }
 
 const FIELD_MAP = {
@@ -235,6 +260,7 @@ export default function ClientPortal() {
   const [saving, setSaving] = useState(false)
   const [dropOpen, setDropOpen] = useState(false)
   const dropRef = useRef(null)
+  const settingRef = useRef(null)
   const [contactModal, setContactModal] = useState({ open: false, mode: 'add', item: null })
   const [contactForm, setContactForm] = useState(BLANK_CONTACT)
   const [contactLogoUploading, setContactLogoUploading] = useState(false)
@@ -242,7 +268,54 @@ export default function ClientPortal() {
   const [contactViewItem, setContactViewItem] = useState(null)
   const [contactTab, setContactTab] = useState('all')
   const [contactSearch, setContactSearch] = useState('')
+  const [contactPage, setContactPage] = useState(1)
+  const CONTACTS_PER_PAGE = 20
   const [contactKycLoading, setContactKycLoading] = useState(null)
+  const [contactKycFilter, setContactKycFilter] = useState('all')
+  const [contactCategoryFilter, setContactCategoryFilter] = useState('all')
+  const [contactTerritoryFilter, setContactTerritoryFilter] = useState('all')
+  const [contactStep, setContactStep] = useState(1)
+  const [territoryData, setTerritoryData] = useState({ states: [] })
+  const [selectedState, setSelectedState] = useState('')
+  const [selectedCity, setSelectedCity] = useState('')
+  const [selectedRegion, setSelectedRegion] = useState('')
+  const [selectedPod, setSelectedPod] = useState('')
+  const [territoryLoading, setTerritoryLoading] = useState(false)
+  const [editTerritoryOpen, setEditTerritoryOpen] = useState(false)
+  const [editSelState, setEditSelState] = useState('')
+  const [editSelCity, setEditSelCity] = useState('')
+  const [editSelRegion, setEditSelRegion] = useState('')
+  const [editSelPod, setEditSelPod] = useState('')
+
+  // Territory management state
+  const [treeData, setTreeData] = useState({ states: [] })
+  const [treeLoading, setTreeLoading] = useState(false)
+  const [tActiveSt, setTActiveSt] = useState(null)
+  const [tActiveCt, setTActiveCt] = useState(null)
+  const [tActiveRg, setTActiveRg] = useState(null)
+  const [tModal, setTModal] = useState(null) // { type: 'state'|'city'|'region'|'pod', parentIds: {} }
+  const [tForm, setTForm] = useState({})
+  const [tSaving, setTSaving] = useState(false)
+
+  const loadTerritoryTree = useCallback(async () => {
+    setTreeLoading(true)
+    try {
+      const res = await api('/api/business/territories', { token })
+      setTreeData(res || { states: [] })
+      setTerritoryData(res || { states: [] })
+    } catch {}
+    finally { setTreeLoading(false) }
+  }, [token])
+
+  const isTcToken = useMemo(() => {
+    if (!token) return false
+    try {
+      const parts = token.split('.')
+      if (parts.length < 2) return false
+      const payload = JSON.parse(atob(parts[1]))
+      return payload?.appId === 'ailocity-tc'
+    } catch { return false }
+  }, [token])
 
   const isBdToken = useMemo(() => {
     if (!token) return false
@@ -259,6 +332,7 @@ export default function ClientPortal() {
   useEffect(() => {
     const handler = (e) => {
       if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false)
+      if (settingRef.current && !settingRef.current.contains(e.target)) setContactSettingOpen(null)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -268,11 +342,11 @@ export default function ClientPortal() {
 
   const loadOverview = useCallback(async () => {
     const [meRes, dashRes, creditsRes, leadsRes, campaignRes] = await Promise.all([
-      api('/api/client/me', { token }),
-      api('/api/client/dashboard', { token }),
-      api('/api/client/credits', { token }),
-      api('/api/client/leads', { token }),
-      api('/api/client/campaigns', { token }),
+      api('/api/business/me', { token }),
+      api('/api/business/dashboard', { token }),
+      api('/api/business/credits', { token }),
+      api('/api/business/leads', { token }),
+      api('/api/business/campaigns', { token }),
     ])
     setMe(meRes)
     setDash(dashRes)
@@ -339,6 +413,19 @@ export default function ClientPortal() {
   }, [active, token, loadTabCollection])
 
   useEffect(() => {
+    if (active === 'territory' && token) {
+      loadTerritoryTree()
+    }
+  }, [active, token, loadTerritoryTree])
+
+  useEffect(() => {
+    if (!token || !isTcToken) return
+    localStorage.removeItem(TOKEN_CLIENT)
+    localStorage.setItem(TOKEN_TC, token)
+    navigate('/tc/dashboard', { replace: true })
+  }, [token, isTcToken, navigate])
+
+  useEffect(() => {
     if (!token || !isBdToken) return
     localStorage.removeItem(TOKEN_CLIENT)
     localStorage.setItem(TOKEN_BD, token)
@@ -346,6 +433,7 @@ export default function ClientPortal() {
   }, [token, isBdToken, navigate])
 
   if (!token) return <Navigate to="/client/login" replace />
+  if (isTcToken) return null
   if (isBdToken) return null
 
   const logout = () => {
@@ -356,31 +444,81 @@ export default function ClientPortal() {
   const openContactAdd = () => {
     setContactForm(BLANK_CONTACT)
     setContactLogoUploading(false)
+    setContactStep(1)
+    setSelectedState('')
+    setSelectedCity('')
+    setSelectedRegion('')
+    setSelectedPod('')
+    // Load territory data
+    if (territoryData.states.length === 0) {
+      setTerritoryLoading(true)
+      loadTerritoryTree().finally(() => setTerritoryLoading(false))
+    }
     setContactModal({ open: true, mode: 'add', item: null })
   }
 
   const openContactEdit = (item) => {
-    setContactForm({ ...BLANK_CONTACT, ...item })
+    setContactForm({ ...BLANK_CONTACT, ...item, territory: item.territory || BLANK_CONTACT.territory })
     setContactLogoUploading(false)
+    setEditTerritoryOpen(false)
+    const t = item.territory || {}
+    setEditSelState(t.stateId || '')
+    setEditSelCity(t.cityId || '')
+    setEditSelRegion(t.regionId || '')
+    setEditSelPod(t.podId || '')
+    if (territoryData.states.length === 0) loadTerritoryTree()
     setContactModal({ open: true, mode: 'edit', item })
   }
 
-  const closeContactModal = () => setContactModal({ open: false, mode: 'add', item: null })
+  const closeContactModal = () => {
+    setContactModal({ open: false, mode: 'add', item: null })
+    setContactStep(1)
+    setSelectedState('')
+    setSelectedCity('')
+    setSelectedRegion('')
+    setSelectedPod('')
+    setEditTerritoryOpen(false)
+    setEditSelState('')
+    setEditSelCity('')
+    setEditSelRegion('')
+    setEditSelPod('')
+  }
 
   const saveContact = async (e) => {
     e.preventDefault()
     if (!contactForm.name.trim()) { setError('Name is required'); return }
     setSaving(true)
     try {
+      // Build territory payload
+      const getTerritoryPayload = (stId, ctId, rgId, pdId) => {
+        if (!pdId) return {}
+        const st = territoryData.states?.find(s => s.id === stId)
+        const ct = st?.cities?.find(c => c.id === ctId)
+        const rg = ct?.regions?.find(r => r.id === rgId)
+        const pd = rg?.pods?.find(p => p.id === pdId)
+        return {
+          stateId: stId, stateName: st?.name || '',
+          cityId: ctId, cityName: ct?.name || '',
+          regionId: rgId, regionName: rg?.name || '',
+          podId: pdId, podNumber: pd?.podNumber || '', podName: pd?.podName || '',
+        }
+      }
+
       const payload = {
         ...contactForm,
         type: String(contactForm.type || '').trim().toLowerCase(),
         status: String(contactForm.status || '').trim().toLowerCase(),
+        ...(contactModal.mode === 'add' && selectedPod
+          ? { territory: getTerritoryPayload(selectedState, selectedCity, selectedRegion, selectedPod) }
+          : {}),
+        ...(contactModal.mode === 'edit' && editSelPod
+          ? { territory: getTerritoryPayload(editSelState, editSelCity, editSelRegion, editSelPod) }
+          : {}),
       }
       if (contactModal.mode === 'add') {
-        await api('/api/client/contacts', { token, method: 'POST', body: payload })
+        await api('/api/business/contacts', { token, method: 'POST', body: payload })
       } else {
-        await api(`/api/client/contacts/${contactModal.item.id}`, { token, method: 'PATCH', body: payload })
+        await api(`/api/business/contacts/${contactModal.item.id}`, { token, method: 'PATCH', body: payload })
       }
       await loadTabCollection('contacts')
       closeContactModal()
@@ -398,7 +536,7 @@ export default function ClientPortal() {
     try {
       const fd = new FormData()
       fd.append('file', file)
-      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/client/upload`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/business/upload`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: fd,
@@ -418,9 +556,9 @@ export default function ClientPortal() {
       setError('Admin-created clients are read-only in this view.')
       return
     }
-    if (!window.confirm('Delete this client?')) return
+    if (!window.confirm('Delete this business?')) return
     try {
-      await api(`/api/client/contacts/${item.id}`, { token, method: 'DELETE' })
+      await api(`/api/business/contacts/${item.id}`, { token, method: 'DELETE' })
       await loadTabCollection('contacts')
     } catch (err) {
       setError(err.message || 'Delete failed')
@@ -508,7 +646,7 @@ export default function ClientPortal() {
     }
     setSaving(true)
     try {
-      await api('/api/client/profile', { token, method: 'PATCH', body: profile })
+      await api('/api/business/profile', { token, method: 'PATCH', body: profile })
       await loadOverview()
     } catch (e2) {
       setError(e2.message || 'Profile update failed')
@@ -584,13 +722,13 @@ export default function ClientPortal() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
-      <aside className={`text-black transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-[72px]'} flex flex-col`} style={{background:'linear-gradient(180deg,#FF7A00 0%,#cc6200 100%)'}}>
-        <div className="flex h-[65px] items-center border-b border-black/20 px-3">
+      <aside className={`transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-[72px]'} flex flex-col`} style={{background:'linear-gradient(180deg,#fff8f0 0%,#fff3e6 100%)',borderRight:'1px solid #ffe0c0'}}>
+        <div className="flex h-[65px] items-center border-b border-orange-200 px-3">
           <img src="/Aliocity logo.jpeg" alt="Ailocity" className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
           {sidebarOpen && (
             <div className="ml-3 overflow-hidden">
-              <p className="truncate text-sm font-semibold text-black">{me?.businessName || 'Client'}</p>
-              <p className="truncate text-xs text-black/60">{me?.appName || 'Ailocity'} • <span className="capitalize">{me?.status || '—'}</span></p>
+              <p className="truncate text-sm font-semibold text-slate-800">{me?.businessName || 'Client'}</p>
+              <p className="truncate text-xs text-slate-500">{me?.appName || 'Ailocity'} • <span className="capitalize">{me?.status || '—'}</span></p>
             </div>
           )}
         </div>
@@ -601,7 +739,7 @@ export default function ClientPortal() {
               type="button"
               onClick={() => setActive(id)}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${
-                active === id ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white' : 'text-black/70 hover:bg-white/20'
+                active === id ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white' : 'text-slate-600 hover:bg-orange-100'
               }`}
             >
               <Icon size={18} />
@@ -937,15 +1075,17 @@ export default function ClientPortal() {
                   (r.mobile || '').includes(contactSearch)
                 )
               : tabFiltered
+            const totalPages = Math.ceil(filteredRows.length / CONTACTS_PER_PAGE)
+            const pagedRows = filteredRows.slice((contactPage - 1) * CONTACTS_PER_PAGE, contactPage * CONTACTS_PER_PAGE)
             return (
               <div className="space-y-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-xl font-semibold text-slate-900">Clients</h2>
-                    <p className="text-sm text-slate-500 mt-0.5">{rows.length} total contacts</p>
+                    <h2 className="text-xl font-semibold text-slate-900">Business</h2>
+                    <p className="text-sm text-slate-500 mt-0.5">{rows.length} total businesses</p>
                   </div>
                   <button type="button" onClick={() => openContactAdd()} className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#FF7A00] to-[#FFB000] px-4 py-2 text-sm font-medium text-white hover:from-[#e06e00] hover:to-[#e6a000] shadow-sm shadow-orange-500/20">
-                    <Plus size={16} /> Add Client
+                    <Plus size={16} /> Add Business
                   </button>
                 </div>
 
@@ -967,94 +1107,123 @@ export default function ClientPortal() {
                 <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                   {/* Filter Tabs */}
                   <div className="flex items-center justify-between px-4 pt-3 pb-0 border-b border-slate-200">
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 overflow-x-auto flex-shrink-0">
                       {[
                         { key: 'all',             label: 'All',            count: rows.length },
                         { key: 'client',          label: 'Client',         count: rows.filter(r => (r.type||'').toLowerCase() === 'client').length },
                         { key: 'server',          label: 'Server',         count: rows.filter(r => (r.type||'').toLowerCase() === 'server').length },
-                        { key: 'server & client', label: 'Server & Client',count: rows.filter(r => (r.type||'').toLowerCase() === 'server & client').length },
+                        { key: 'server & client', label: 'S & C',          count: rows.filter(r => (r.type||'').toLowerCase() === 'server & client').length },
                       ].map(tab => (
                         <button
                           key={tab.key}
                           type="button"
-                          onClick={() => setContactTab(tab.key)}
-                          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                          onClick={() => { setContactTab(tab.key); setContactPage(1) }}
+                          className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
                             contactTab === tab.key
                               ? 'border-orange-500 text-orange-500'
                               : 'border-transparent text-slate-500 hover:text-slate-800'
                           }`}
                         >
-                          {tab.label} <span className="ml-1 text-xs text-slate-400">({tab.count})</span>
+                          {tab.label} <span className="ml-0.5 text-slate-400">({tab.count})</span>
                         </button>
                       ))}
                     </div>
-                    <div className="relative mb-1">
+                    <div className="relative mb-1 flex-shrink-0">
                       <input
                         type="text"
-                        placeholder="Search clients…"
+                        placeholder="Search…"
                         value={contactSearch}
-                        onChange={e => setContactSearch(e.target.value)}
-                        className="border border-slate-200 rounded-lg pl-3 pr-8 py-1.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 w-56"
+                        onChange={e => { setContactSearch(e.target.value); setContactPage(1) }}
+                        className="border border-slate-200 rounded-lg pl-3 pr-7 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 w-40"
                       />
                       {contactSearch && (
                         <button type="button" onClick={() => setContactSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">✕</button>
                       )}
                     </div>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
+                  <div>
+                    <table className="w-full table-fixed">
+                      <colgroup>
+                        <col className="w-8" />
+                        <col className="w-10" />
+                        <col className="w-[13%]" />
+                        <col className="w-[11%]" />
+                        <col className="w-[11%]" />
+                        <col className="w-[13%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[9%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[7%]" />
+                        <col className="w-[6%]" />
+                        <col className="w-10" />
+                      </colgroup>
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
-                          {['#', 'Logo', 'Name', 'Category', 'Email', 'Mobile', 'Type', 'Status', 'Login', 'Settings'].map(h => (
-                            <th key={h} className="px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-slate-500 whitespace-nowrap">{h}</th>
+                          {['#', 'Logo', 'Name', 'Category', 'Territory', 'Email', 'Mobile', 'Type', 'KYC', 'Status', 'Login', ''].map(h => (
+                            <th key={h} className="px-2 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-slate-500">{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {filteredRows.length === 0 ? (
-                          <tr><td colSpan={10} className="px-6 py-12 text-center text-sm text-slate-400">No clients found.</td></tr>
-                        ) : filteredRows.map((r, idx) => (
+                        {pagedRows.length === 0 ? (
+                          <tr><td colSpan={12} className="px-6 py-12 text-center text-sm text-slate-400">No businesses found.</td></tr>
+                        ) : pagedRows.map((r, idx) => (
                           <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
-                            <td className="px-3 py-2.5 text-sm text-slate-400 whitespace-nowrap">{idx + 1}</td>
-                            <td className="px-3 py-2.5">
-                              {r.logoUrl
-                                ? <img src={r.logoUrl} alt="logo" className="w-8 h-8 rounded-full object-cover border border-slate-200" />
-                                : <div className="w-8 h-8 rounded-full bg-orange-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
+                            <td className="px-2 py-2 text-xs text-slate-400 w-8">{(contactPage - 1) * CONTACTS_PER_PAGE + idx + 1}</td>
+                            <td className="px-2 py-2 w-10">
+                              {r.logoKey
+                                ? <ContactLogo logoKey={r.logoKey} token={token} size="md" />
+                                : <div className="w-7 h-7 rounded-full bg-orange-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
                                     <span className="text-orange-600 text-xs font-bold">{(r.name || '?').slice(0,2).toUpperCase()}</span>
                                   </div>
                               }
                             </td>
-                            <td className="px-3 py-2.5 max-w-[140px]">
-                              <p className="text-sm font-medium text-slate-800 truncate">{r.name}</p>
-                              <p className="text-xs text-slate-400 truncate">{r.company || '—'}</p>
+                            <td className="px-2 py-2 w-32">
+                              <p className="text-xs font-medium text-slate-800 truncate max-w-[120px]">{r.name}</p>
+                              <p className="text-xs text-slate-400 truncate max-w-[120px]">{r.company || '—'}</p>
                             </td>
-                            <td className="px-3 py-2.5 max-w-[110px]">
-                              <p className="text-xs text-slate-700 truncate">{r.category || '—'}</p>
-                              <p className="text-xs text-slate-400 truncate">{r.subCategory || ''}</p>
+                            <td className="px-2 py-2 w-28">
+                              <p className="text-xs text-slate-700 truncate max-w-[100px]">{r.category || '—'}</p>
+                              <p className="text-xs text-slate-400 truncate max-w-[100px]">{r.subCategory || ''}</p>
                             </td>
-                            <td className="px-3 py-2.5 max-w-[150px]">
-                              <p className="text-xs text-slate-600 truncate">{r.email || '—'}</p>
+                            <td className="px-2 py-2 w-28">
+                              {r.territory?.podNumber ? (
+                                <div>
+                                  <p className="text-xs font-medium text-orange-600 truncate max-w-[100px]">{r.territory.podNumber}</p>
+                                  <p className="text-xs text-slate-400 truncate max-w-[100px]">{r.territory.cityName}{r.territory.regionName ? ` · ${r.territory.regionName}` : ''}</p>
+                                </div>
+                              ) : <span className="text-xs text-slate-300">—</span>}
                             </td>
-                            <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">{r.mobile || '—'}</td>
-                            <td className="px-3 py-2.5">
+                            <td className="px-2 py-2 w-32">
+                              <p className="text-xs text-slate-600 truncate max-w-[120px]">{r.email || '—'}</p>
+                            </td>
+                            <td className="px-2 py-2 text-xs text-slate-600 w-24 whitespace-nowrap">{r.mobile || '—'}</td>
+                            <td className="px-2 py-2 w-24">
                               <span className={`rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${typeColors[(r.type||'').toLowerCase()] || 'bg-slate-100 text-slate-600'}`}>{r.type || '—'}</span>
                             </td>
-                            <td className="px-3 py-2.5">
+                            <td className="px-2 py-2 w-20">
+                              {(() => {
+                                const kyc = r.kyc || 'pending'
+                                const kycColor = kyc === 'verified' ? 'bg-emerald-100 text-emerald-700' : kyc === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                                return <span className={`rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap capitalize ${kycColor}`}>{kyc}</span>
+                              })()}
+                            </td>
+                            <td className="px-2 py-2 w-20">
                               <span className={`rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${pill(r.status)}`}>{r.status || '—'}</span>
                             </td>
-                            <td className="px-3 py-2.5">
+                            <td className="px-2 py-2 w-16">
                               <button type="button" onClick={async () => {
                                 try {
-                                  const res = await api(`/api/client/contacts/${r.id}/login`, { token, method: 'POST' })
+                                  const res = await api(`/api/business/contacts/${r.id}/login`, { token, method: 'POST' })
                                   localStorage.setItem(TOKEN_SUBCLIENT, res.token)
                                   window.open('/client/dashboard', '_blank')
                                 } catch (err) { setError(err.message || 'No login account linked') }
-                              }} className="text-xs font-medium px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors whitespace-nowrap">
+                              }} className="text-xs font-medium px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors whitespace-nowrap">
                                 Login
                               </button>
                             </td>
-                            <td className="px-3 py-2.5">
-                              <div className="relative">
+                            <td className="px-2 py-2 w-10">
+                              <div className="relative" ref={contactSettingOpen === r.id ? settingRef : null}>
                                 <button
                                   type="button"
                                   onClick={() => setContactSettingOpen(contactSettingOpen === r.id ? null : r.id)}
@@ -1076,6 +1245,30 @@ export default function ClientPortal() {
                       </tbody>
                     </table>
                   </div>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
+                      <p className="text-xs text-slate-500">
+                        Showing {(contactPage - 1) * CONTACTS_PER_PAGE + 1}–{Math.min(contactPage * CONTACTS_PER_PAGE, filteredRows.length)} of {filteredRows.length}
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <button type="button" onClick={() => setContactPage(p => Math.max(1, p - 1))} disabled={contactPage === 1}
+                          className="px-2.5 py-1 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">← Prev</button>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                          .filter(p => p === 1 || p === totalPages || Math.abs(p - contactPage) <= 1)
+                          .reduce((acc, p, i, arr) => { if (i > 0 && p - arr[i-1] > 1) acc.push('...'); acc.push(p); return acc }, [])
+                          .map((p, i) => p === '...' ? (
+                            <span key={`e${i}`} className="px-1 text-xs text-slate-400">…</span>
+                          ) : (
+                            <button key={p} type="button" onClick={() => setContactPage(p)}
+                              className={`w-7 h-7 text-xs rounded-lg border transition-colors ${
+                                contactPage === p ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white border-orange-400' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                              }`}>{p}</button>
+                          ))}
+                        <button type="button" onClick={() => setContactPage(p => Math.min(totalPages, p + 1))} disabled={contactPage === totalPages}
+                          className="px-2.5 py-1 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">Next →</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )
@@ -1117,6 +1310,226 @@ export default function ClientPortal() {
             { key: 'likes', label: 'Likes' },
             { key: 'status', label: 'Status', kind: 'badge' },
           ])}
+
+          {!bootLoading && active === 'territory' && (() => {
+            const saveTerritory = async (e) => {
+              e.preventDefault()
+              setTSaving(true)
+              try {
+                const { type, parentIds } = tModal
+                let body = {}
+                if (type === 'state') body = { name: tForm.name, code: tForm.code || '' }
+                if (type === 'city') body = { stateId: parentIds.stateId, name: tForm.name }
+                if (type === 'region') body = { stateId: parentIds.stateId, cityId: parentIds.cityId, name: tForm.name }
+                if (type === 'pod') body = { stateId: parentIds.stateId, cityId: parentIds.cityId, regionId: parentIds.regionId, podNumber: tForm.podNumber, podName: tForm.podName, capacity: tForm.capacity || 100 }
+                await api(`/api/business/territories/${type}s`, { token, method: 'POST', body })
+                await loadTerritoryTree()
+                setTModal(null)
+                setTForm({})
+              } catch (err) { setError(err.message || 'Save failed') }
+              finally { setTSaving(false) }
+            }
+
+            const activeState = treeData.states?.find(s => s.id === tActiveSt)
+            const activeCity = activeState?.cities?.find(c => c.id === tActiveCt)
+            const activeRegion = activeCity?.regions?.find(r => r.id === tActiveRg)
+
+            return (
+              <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold text-slate-900">Territory Management</h2>
+                    <p className="text-sm text-slate-500 mt-0.5">Manage State → City → Region → POD hierarchy</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { loadTerritoryTree() }}
+                    className="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-3 py-1.5"
+                  >↻ Refresh</button>
+                </div>
+
+                {treeLoading && <div className="py-10 text-center text-sm text-slate-400">Loading…</div>}
+
+                {!treeLoading && (
+                  <div className="grid grid-cols-4 gap-4 h-[calc(100vh-220px)]">
+
+                    {/* Column 1: States */}
+                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">States</p>
+                        <button type="button" onClick={() => { setTModal({ type: 'state', parentIds: {} }); setTForm({}) }} className="w-6 h-6 rounded-md bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600">
+                          <Plus size={13} />
+                        </button>
+                      </div>
+                      <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                        {(treeData.states || []).length === 0 && (
+                          <p className="px-4 py-6 text-xs text-slate-400 text-center">No states yet. Add one.</p>
+                        )}
+                        {(treeData.states || []).map(s => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => { setTActiveSt(s.id); setTActiveCt(null); setTActiveRg(null) }}
+                            className={`w-full text-left px-4 py-3 text-sm transition-colors ${
+                              tActiveSt === s.id ? 'bg-orange-50 text-orange-700 font-medium' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <p className="font-medium">{s.name}</p>
+                            {s.code && <p className="text-xs text-slate-400">{s.code}</p>}
+                            <p className="text-xs text-slate-400 mt-0.5">{s.cities?.length || 0} cities</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Column 2: Cities */}
+                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Cities</p>
+                        {tActiveSt && (
+                          <button type="button" onClick={() => { setTModal({ type: 'city', parentIds: { stateId: tActiveSt } }); setTForm({}) }} className="w-6 h-6 rounded-md bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600">
+                            <Plus size={13} />
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                        {!tActiveSt && <p className="px-4 py-6 text-xs text-slate-400 text-center">Select a state first</p>}
+                        {tActiveSt && (activeState?.cities || []).length === 0 && <p className="px-4 py-6 text-xs text-slate-400 text-center">No cities yet.</p>}
+                        {(activeState?.cities || []).map(c => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => { setTActiveCt(c.id); setTActiveRg(null) }}
+                            className={`w-full text-left px-4 py-3 text-sm transition-colors ${
+                              tActiveCt === c.id ? 'bg-orange-50 text-orange-700 font-medium' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <p className="font-medium">{c.name}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{c.regions?.length || 0} regions</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Column 3: Regions */}
+                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Regions</p>
+                        {tActiveCt && (
+                          <button type="button" onClick={() => { setTModal({ type: 'region', parentIds: { stateId: tActiveSt, cityId: tActiveCt } }); setTForm({}) }} className="w-6 h-6 rounded-md bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600">
+                            <Plus size={13} />
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                        {!tActiveCt && <p className="px-4 py-6 text-xs text-slate-400 text-center">Select a city first</p>}
+                        {tActiveCt && (activeCity?.regions || []).length === 0 && <p className="px-4 py-6 text-xs text-slate-400 text-center">No regions yet.</p>}
+                        {(activeCity?.regions || []).map(r => (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => setTActiveRg(r.id)}
+                            className={`w-full text-left px-4 py-3 text-sm transition-colors ${
+                              tActiveRg === r.id ? 'bg-orange-50 text-orange-700 font-medium' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <p className="font-medium">{r.name} Region</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{r.pods?.length || 0} PODs</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Column 4: PODs */}
+                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">PODs</p>
+                        {tActiveRg && (
+                          <button type="button" onClick={() => { setTModal({ type: 'pod', parentIds: { stateId: tActiveSt, cityId: tActiveCt, regionId: tActiveRg } }); setTForm({}) }} className="w-6 h-6 rounded-md bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600">
+                            <Plus size={13} />
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                        {!tActiveRg && <p className="px-4 py-6 text-xs text-slate-400 text-center">Select a region first</p>}
+                        {tActiveRg && (activeRegion?.pods || []).length === 0 && <p className="px-4 py-6 text-xs text-slate-400 text-center">No PODs yet.</p>}
+                        {(activeRegion?.pods || []).map(p => (
+                          <div key={p.id} className="px-4 py-3">
+                            <p className="text-sm font-medium text-slate-800">{p.podNumber}</p>
+                            <p className="text-xs text-slate-500">{p.podName}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">Capacity: {p.capacity}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Territory Add Modal */}
+                {tModal && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setTModal(null)}>
+                    <div className="relative w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+                        <h2 className="text-base font-semibold text-slate-900 capitalize">Add {tModal.type}</h2>
+                        <button type="button" onClick={() => setTModal(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={16} /></button>
+                      </div>
+                      <form onSubmit={saveTerritory} className="px-5 py-4 space-y-3">
+                        {tModal.type === 'state' && (
+                          <>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700 mb-1">State Name <span className="text-red-500">*</span></label>
+                              <input value={tForm.name || ''} onChange={e => setTForm(p => ({ ...p, name: e.target.value }))} required placeholder="e.g. Delhi" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700 mb-1">State Code</label>
+                              <input value={tForm.code || ''} onChange={e => setTForm(p => ({ ...p, code: e.target.value }))} placeholder="e.g. DL" maxLength={3} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                            </div>
+                          </>
+                        )}
+                        {tModal.type === 'city' && (
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">City Name <span className="text-red-500">*</span></label>
+                            <input value={tForm.name || ''} onChange={e => setTForm(p => ({ ...p, name: e.target.value }))} required placeholder="e.g. Gurgaon" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                          </div>
+                        )}
+                        {tModal.type === 'region' && (
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">Region <span className="text-red-500">*</span></label>
+                            <select value={tForm.name || ''} onChange={e => setTForm(p => ({ ...p, name: e.target.value }))} required className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
+                              <option value="">— Select Region —</option>
+                              {['North','South','East','West','Central'].map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                          </div>
+                        )}
+                        {tModal.type === 'pod' && (
+                          <>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700 mb-1">POD Number <span className="text-red-500">*</span></label>
+                              <input value={tForm.podNumber || ''} onChange={e => setTForm(p => ({ ...p, podNumber: e.target.value }))} required placeholder="e.g. POD-001" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700 mb-1">POD Name <span className="text-red-500">*</span></label>
+                              <input value={tForm.podName || ''} onChange={e => setTForm(p => ({ ...p, podName: e.target.value }))} required placeholder="e.g. Sector 14-28" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700 mb-1">Capacity</label>
+                              <input type="number" value={tForm.capacity || 100} onChange={e => setTForm(p => ({ ...p, capacity: Number(e.target.value) }))} min={1} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                            </div>
+                          </>
+                        )}
+                        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                          <button type="button" onClick={() => setTModal(null)} className="rounded-lg border border-slate-200 bg-slate-100 px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-200">Cancel</button>
+                          <button type="submit" disabled={tSaving} className="rounded-lg bg-gradient-to-r from-[#FF7A00] to-[#FFB000] px-5 py-1.5 text-sm font-medium text-white disabled:opacity-60">
+                            {tSaving ? 'Saving…' : `Add ${tModal.type.charAt(0).toUpperCase() + tModal.type.slice(1)}`}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </section>
       </main>
 
@@ -1127,8 +1540,8 @@ export default function ClientPortal() {
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
               <div className="flex items-center gap-3">
-                {contactViewItem.logoUrl
-                  ? <img src={contactViewItem.logoUrl} alt="logo" className="w-12 h-12 rounded-full object-cover border border-slate-200 flex-shrink-0" />
+                {contactViewItem.logoKey
+                  ? <ContactLogo logoKey={contactViewItem.logoKey} token={token} size="lg" />
                   : <div className="w-12 h-12 rounded-full bg-orange-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
                       <span className="text-orange-600 text-sm font-bold">{(contactViewItem.name || '?').slice(0,2).toUpperCase()}</span>
                     </div>
@@ -1151,7 +1564,18 @@ export default function ClientPortal() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Business Information</p>
                 <div className="grid grid-cols-2 gap-3">
+                  {contactViewItem.logoKey && (
+                    <div className="col-span-2 flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2">
+                      <ContactLogo logoKey={contactViewItem.logoKey} token={token} size="xl" />
+                      <div>
+                        <p className="text-xs text-slate-400">Business Logo</p>
+                        <p className="text-sm font-medium text-slate-800 mt-0.5">{contactViewItem.name}</p>
+                      </div>
+                    </div>
+                  )}
                   {[
+                    ['Full Name', contactViewItem.name],
+                    ['Company', contactViewItem.company],
                     ['Business Type', contactViewItem.businessType],
                     ['Category', contactViewItem.category],
                     ['Sub Category', contactViewItem.subCategory],
@@ -1161,7 +1585,7 @@ export default function ClientPortal() {
                   ].map(([l, v]) => v ? (
                     <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
                       <p className="text-xs text-slate-400">{l}</p>
-                      <p className="text-sm font-medium text-slate-800 mt-0.5">{v}</p>
+                      <p className="text-sm font-medium text-slate-800 mt-0.5 break-all">{v}</p>
                     </div>
                   ) : null)}
                 </div>
@@ -1185,7 +1609,7 @@ export default function ClientPortal() {
               </div>
 
               {/* Location */}
-              {(contactViewItem.city || contactViewItem.address) && (
+              {(contactViewItem.city || contactViewItem.address || contactViewItem.state) && (
                 <div className="border-t border-slate-100 pt-4">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Location</p>
                   <div className="grid grid-cols-2 gap-3">
@@ -1199,6 +1623,46 @@ export default function ClientPortal() {
                       <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
                         <p className="text-xs text-slate-400">{l}</p>
                         <p className="text-sm font-medium text-slate-800 mt-0.5">{v}</p>
+                      </div>
+                    ) : null)}
+                  </div>
+                </div>
+              )}
+
+              {/* Territory */}
+              {(contactViewItem.territory?.stateName || contactViewItem.stateName) && (
+                <div className="border-t border-slate-100 pt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Territory Assignment</p>
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3">
+                    <p className="text-sm font-medium text-slate-800">
+                      {contactViewItem.territory?.stateName || contactViewItem.stateName} →{' '}
+                      {contactViewItem.territory?.cityName || contactViewItem.cityName} →{' '}
+                      {contactViewItem.territory?.regionName || contactViewItem.region} Region →{' '}
+                      {contactViewItem.territory?.podNumber || contactViewItem.podNumber}
+                    </p>
+                    {(contactViewItem.territory?.podName || contactViewItem.podName) && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        POD: {contactViewItem.territory?.podName || contactViewItem.podName}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* CRM / MBC */}
+              {(contactViewItem.type || contactViewItem.mbcSubCategory) && (
+                <div className="border-t border-slate-100 pt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">CRM Details</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      ['MBC Type', contactViewItem.type],
+                      ['MBC Sub Category', contactViewItem.mbcSubCategory],
+                      ['Status', contactViewItem.status],
+                      ['Created At', contactViewItem.createdAt ? new Date(contactViewItem.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : null],
+                    ].map(([l, v]) => v ? (
+                      <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
+                        <p className="text-xs text-slate-400">{l}</p>
+                        <p className="text-sm font-medium text-slate-800 mt-0.5 capitalize">{v}</p>
                       </div>
                     ) : null)}
                   </div>
@@ -1228,7 +1692,7 @@ export default function ClientPortal() {
               {contactViewItem.notes && (
                 <div className="border-t border-slate-100 pt-4">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Notes</p>
-                  <p className="text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2">{contactViewItem.notes}</p>
+                  <p className="text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2 whitespace-pre-wrap">{contactViewItem.notes}</p>
                 </div>
               )}
 
@@ -1252,7 +1716,7 @@ export default function ClientPortal() {
               <button type="button" disabled={contactKycLoading !== null} onClick={async () => {
                 try {
                   setContactKycLoading('verified')
-                  await api(`/api/client/contacts/${contactViewItem.id}/kyc`, { token, method: 'PATCH', body: { kyc: 'verified' } })
+                  await api(`/api/business/contacts/${contactViewItem.id}/kyc`, { token, method: 'PATCH', body: { kyc: 'verified' } })
                   await loadTabCollection('contacts')
                   setContactViewItem(prev => ({ ...prev, kyc: 'verified' }))
                 } catch (err) { setError(err.message || 'KYC update failed') }
@@ -1263,7 +1727,7 @@ export default function ClientPortal() {
               <button type="button" disabled={contactKycLoading !== null} onClick={async () => {
                 try {
                   setContactKycLoading('rejected')
-                  await api(`/api/client/contacts/${contactViewItem.id}/kyc`, { token, method: 'PATCH', body: { kyc: 'rejected' } })
+                  await api(`/api/business/contacts/${contactViewItem.id}/kyc`, { token, method: 'PATCH', body: { kyc: 'rejected' } })
                   await loadTabCollection('contacts')
                   setContactViewItem(prev => ({ ...prev, kyc: 'rejected' }))
                 } catch (err) { setError(err.message || 'KYC update failed') }
@@ -1282,16 +1746,183 @@ export default function ClientPortal() {
       {contactModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeContactModal}>
           <div className="relative w-full max-w-3xl rounded-xl border border-slate-200 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 sticky top-0 bg-white rounded-t-xl z-10">
               <div>
-                <h2 className="text-base font-semibold text-slate-900">{contactModal.mode === 'add' ? 'Add Client' : 'Edit Client'}</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Fill in the client details</p>
+                <h2 className="text-base font-semibold text-slate-900">
+                  {contactModal.mode === 'add' ? 'Add New Business' : 'Edit Business'}
+                </h2>
+                {contactModal.mode === 'add' && (
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Step {contactStep} of 2 — {contactStep === 1 ? 'Territory Selection' : 'Business Details'}
+                  </p>
+                )}
               </div>
               <button type="button" onClick={closeContactModal} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900"><X size={18} /></button>
             </div>
 
+            {/* Progress Bar — only for add mode */}
+            {contactModal.mode === 'add' && (
+              <div className="px-5 pt-3 pb-1">
+                <div className="flex gap-2">
+                  <div className={`h-1 flex-1 rounded-full transition-all duration-300 ${contactStep >= 1 ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000]' : 'bg-slate-200'}`} />
+                  <div className={`h-1 flex-1 rounded-full transition-all duration-300 ${contactStep >= 2 ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000]' : 'bg-slate-200'}`} />
+                </div>
+                <div className="flex justify-between mt-1.5">
+                  <span className={`text-xs font-medium ${contactStep >= 1 ? 'text-orange-500' : 'text-slate-400'}`}>Territory</span>
+                  <span className={`text-xs font-medium ${contactStep >= 2 ? 'text-orange-500' : 'text-slate-400'}`}>Business Details</span>
+                </div>
+              </div>
+            )}
+
+            {/* ── STEP 1: Territory Selection ── */}
+            {contactModal.mode === 'add' && contactStep === 1 && (() => {
+              const currentState = territoryData.states?.find(s => s.id === selectedState)
+              const currentCity = currentState?.cities?.find(c => c.id === selectedCity)
+              const currentRegion = currentCity?.regions?.find(r => r.id === selectedRegion)
+              const availableCities = currentState?.cities || []
+              const availableRegions = currentCity?.regions || []
+              const availablePods = currentRegion?.pods || []
+              return (
+                <div className="px-5 py-5 space-y-4 max-h-[65vh] overflow-y-auto">
+                  {territoryLoading ? (
+                    <div className="py-10 text-center text-sm text-slate-400">Loading territory data…</div>
+                  ) : (
+                    <>
+                      {/* State */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                          Business State <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={selectedState}
+                          onChange={e => { setSelectedState(e.target.value); setSelectedCity(''); setSelectedRegion(''); setSelectedPod('') }}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500"
+                        >
+                          <option value="">— Select State —</option>
+                          {(territoryData.states || []).map(s => (
+                            <option key={s.id} value={s.id}>
+                              {s.name} ({s.cities?.length || 0} cities)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* City */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                          City <span className="text-red-500">*</span>
+                          {selectedState && <span className="ml-1 text-orange-500 font-normal">({availableCities.length} available)</span>}
+                        </label>
+                        <select
+                          value={selectedCity}
+                          onChange={e => { setSelectedCity(e.target.value); setSelectedRegion(''); setSelectedPod('') }}
+                          disabled={!selectedState}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 disabled:bg-slate-50 disabled:text-slate-400"
+                        >
+                          <option value="">— Select City —</option>
+                          {availableCities.map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} ({c.regions?.length || 0} regions)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Region */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                          Region <span className="text-red-500">*</span>
+                          {selectedCity && <span className="ml-1 text-orange-500 font-normal">({availableRegions.length} available)</span>}
+                        </label>
+                        <select
+                          value={selectedRegion}
+                          onChange={e => { setSelectedRegion(e.target.value); setSelectedPod('') }}
+                          disabled={!selectedCity}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 disabled:bg-slate-50 disabled:text-slate-400"
+                        >
+                          <option value="">— Select Region —</option>
+                          {availableRegions.map(r => (
+                            <option key={r.id} value={r.id}>
+                              {r.name} ({r.pods?.length || 0} PODs)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* POD */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                          POD (Point of Delivery) <span className="text-red-500">*</span>
+                          {selectedRegion && <span className="ml-1 text-orange-500 font-normal">({availablePods.length} available)</span>}
+                        </label>
+                        <select
+                          value={selectedPod}
+                          onChange={e => setSelectedPod(e.target.value)}
+                          disabled={!selectedRegion}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 disabled:bg-slate-50 disabled:text-slate-400"
+                        >
+                          <option value="">— Select POD —</option>
+                          {availablePods.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.podNumber} — {p.podName} (cap: {p.capacity})
+                            </option>
+                          ))}
+                        </select>
+                        {selectedPod && availablePods.find(p => p.id === selectedPod) && (
+                          <p className="mt-1.5 text-xs text-slate-500">
+                            📍 {availablePods.find(p => p.id === selectedPod)?.podNumber} · {availablePods.find(p => p.id === selectedPod)?.podName}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Territory Summary */}
+                      {selectedState && selectedCity && selectedRegion && selectedPod && (
+                        <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
+                          <p className="text-xs font-semibold text-orange-700 mb-1">Selected Territory</p>
+                          <p className="text-sm text-slate-700">
+                            {currentState?.name} → {currentCity?.name} → {currentRegion?.name} Region → {availablePods.find(p => p.id === selectedPod)?.podNumber}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  <div className="flex justify-between pt-4 border-t border-slate-100">
+                    <button type="button" onClick={closeContactModal} className="rounded-lg border border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-700 hover:bg-slate-200">Cancel</button>
+                    <button
+                      type="button"
+                      disabled={!selectedState || !selectedCity || !selectedRegion || !selectedPod}
+                      onClick={() => setContactStep(2)}
+                      className="rounded-lg bg-gradient-to-r from-[#FF7A00] to-[#FFB000] px-5 py-2 text-sm font-medium text-white hover:from-[#e06e00] hover:to-[#e6a000] disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-orange-500/20"
+                    >
+                      Next: Business Details →
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* ── STEP 2 (add) or full form (edit) ── */}
+            {(contactModal.mode === 'edit' || (contactModal.mode === 'add' && contactStep === 2)) && (
             <form onSubmit={saveContact} className="max-h-[78vh] overflow-y-auto px-5 py-4 space-y-5">
+
+              {/* Territory Summary Banner — only in add mode step 2 */}
+              {contactModal.mode === 'add' && (
+                <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-orange-700">Territory</p>
+                    <p className="text-sm text-slate-700 mt-0.5">
+                      {territoryData.states?.find(s => s.id === selectedState)?.name} →{' '}
+                      {territoryData.states?.find(s => s.id === selectedState)?.cities?.find(c => c.id === selectedCity)?.name} →{' '}
+                      {territoryData.states?.find(s => s.id === selectedState)?.cities?.find(c => c.id === selectedCity)?.regions?.find(r => r.id === selectedRegion)?.name} Region →{' '}
+                      {(() => { const p = territoryData.states?.find(s => s.id === selectedState)?.cities?.find(c => c.id === selectedCity)?.regions?.find(r => r.id === selectedRegion)?.pods?.find(p => p.id === selectedPod); return p ? `${p.podNumber} · ${p.podName}` : '' })()}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => setContactStep(1)} className="text-xs text-orange-600 hover:text-orange-800 font-medium whitespace-nowrap ml-4">Change</button>
+                </div>
+              )}
 
               {/* Business Information */}
               <div>
@@ -1307,16 +1938,21 @@ export default function ClientPortal() {
                   </div>
                   <div>
                     <label className="block text-xs text-slate-600 mb-1">Business Logo</label>
-                    <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-1.5 hover:border-orange-400 transition-colors">
-                      <Plus size={13} className="text-slate-400 flex-shrink-0" />
-                      <span className="text-sm text-slate-500 truncate">
-                        {contactLogoUploading ? 'Uploading…' : contactForm.logoKey ? '✓ Logo uploaded' : 'Upload logo'}
-                      </span>
-                      {contactForm.logoKey && !contactLogoUploading && (
-                        <span className="ml-auto text-xs text-emerald-600 flex-shrink-0">✓</span>
+                    <div className="flex items-center gap-2">
+                      {contactForm.logoKey && (
+                        <ContactLogo logoKey={contactForm.logoKey} token={token} size="lg" />
                       )}
-                      <input type="file" accept="image/*" onChange={handleContactLogoUpload} className="hidden" disabled={contactLogoUploading} />
-                    </label>
+                      <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-1.5 hover:border-orange-400 transition-colors flex-1">
+                        <Plus size={13} className="text-slate-400 flex-shrink-0" />
+                        <span className="text-sm text-slate-500 truncate">
+                          {contactLogoUploading ? 'Uploading…' : contactForm.logoKey ? 'Change logo' : 'Upload logo'}
+                        </span>
+                        {contactForm.logoKey && !contactLogoUploading && (
+                          <span className="ml-auto text-xs text-emerald-600 flex-shrink-0">✓</span>
+                        )}
+                        <input type="file" accept="image/*" onChange={handleContactLogoUpload} className="hidden" disabled={contactLogoUploading} />
+                      </label>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs text-slate-600 mb-1">Business Type</label>
@@ -1449,6 +2085,16 @@ export default function ClientPortal() {
                       ].map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-xs text-slate-600 mb-1">KYC Status</label>
+                    <select value={String(contactForm.kyc || 'pending').toLowerCase()} onChange={e => setContactForm(p => ({ ...p, kyc: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
+                      {[
+                        { v: 'pending', label: 'Pending' },
+                        { v: 'verified', label: 'Verified' },
+                        { v: 'rejected', label: 'Rejected' },
+                      ].map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                    </select>
+                  </div>
                   <div className="col-span-3">
                     <label className="block text-xs text-slate-600 mb-1">Notes</label>
                     <textarea value={contactForm.notes} onChange={e => setContactForm(p => ({ ...p, notes: e.target.value }))} placeholder="Internal notes..." rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 resize-none" />
@@ -1456,19 +2102,110 @@ export default function ClientPortal() {
                 </div>
               </div>
 
+              {/* Territory — Edit Mode */}
+              {contactModal.mode === 'edit' && (
+                <div>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Territory Assignment</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditTerritoryOpen(v => !v)
+                        if (territoryData.states.length === 0) loadTerritoryTree()
+                      }}
+                      className="text-xs text-orange-600 hover:text-orange-800 font-medium"
+                    >
+                      {editTerritoryOpen ? 'Cancel Change' : 'Change Territory'}
+                    </button>
+                  </div>
+
+                  {/* Show current territory */}
+                  {!editTerritoryOpen && (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                      {(contactForm.territory?.stateName || contactModal.item?.territory?.stateName) ? (
+                        <>
+                          <p className="text-sm font-medium text-slate-800">
+                            {contactForm.territory?.stateName} → {contactForm.territory?.cityName} → {contactForm.territory?.regionName} Region → {contactForm.territory?.podNumber}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-0.5">POD: {contactForm.territory?.podName}</p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-slate-400">No territory assigned. Click "Change Territory" to assign.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Territory change dropdowns */}
+                  {editTerritoryOpen && (() => {
+                    const st = territoryData.states?.find(s => s.id === editSelState)
+                    const ct = st?.cities?.find(c => c.id === editSelCity)
+                    const rg = ct?.regions?.find(r => r.id === editSelRegion)
+                    return (
+                      <div className="space-y-2.5 rounded-lg border border-orange-200 bg-orange-50 p-3">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-1">State <span className="text-red-500">*</span></label>
+                          <select value={editSelState} onChange={e => { setEditSelState(e.target.value); setEditSelCity(''); setEditSelRegion(''); setEditSelPod('') }}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
+                            <option value="">— Select State —</option>
+                            {(territoryData.states || []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-1">City <span className="text-red-500">*</span></label>
+                          <select value={editSelCity} onChange={e => { setEditSelCity(e.target.value); setEditSelRegion(''); setEditSelPod('') }}
+                            disabled={!editSelState}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 disabled:opacity-50">
+                            <option value="">— Select City —</option>
+                            {(st?.cities || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-1">Region <span className="text-red-500">*</span></label>
+                          <select value={editSelRegion} onChange={e => { setEditSelRegion(e.target.value); setEditSelPod('') }}
+                            disabled={!editSelCity}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 disabled:opacity-50">
+                            <option value="">— Select Region —</option>
+                            {(ct?.regions || []).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-1">POD <span className="text-red-500">*</span></label>
+                          <select value={editSelPod} onChange={e => setEditSelPod(e.target.value)}
+                            disabled={!editSelRegion}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 disabled:opacity-50">
+                            <option value="">— Select POD —</option>
+                            {(rg?.pods || []).map(p => <option key={p.id} value={p.id}>{p.podNumber} — {p.podName}</option>)}
+                          </select>
+                        </div>
+                        {editSelPod && (
+                          <p className="text-xs text-orange-700 font-medium">
+                            ✓ {st?.name} → {ct?.name} → {rg?.name} → {rg?.pods?.find(p => p.id === editSelPod)?.podNumber}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
               <div className="border-t border-slate-100" />
 
               {/* Footer */}
               <div className="flex items-center justify-between border-t border-slate-200 pt-3">
-                <p className="text-xs text-slate-400">* Required fields</p>
                 <div className="flex gap-2">
+                  {contactModal.mode === 'add' && (
+                    <button type="button" onClick={() => setContactStep(1)} className="rounded-lg border border-slate-200 bg-slate-100 px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-200">
+                      ← Back
+                    </button>
+                  )}
                   <button type="button" onClick={closeContactModal} className="rounded-lg border border-slate-200 bg-slate-100 px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-200">Cancel</button>
-                  <button type="submit" disabled={saving} className="rounded-lg bg-gradient-to-r from-[#FF7A00] to-[#FFB000] px-5 py-1.5 text-sm font-medium text-white hover:from-[#e06e00] hover:to-[#e6a000] disabled:opacity-60 shadow-sm shadow-orange-500/20">
-                    {saving ? 'Saving...' : contactModal.mode === 'add' ? 'Add Client' : 'Save Changes'}
-                  </button>
                 </div>
+                <button type="submit" disabled={saving} className="rounded-lg bg-gradient-to-r from-[#FF7A00] to-[#FFB000] px-5 py-1.5 text-sm font-medium text-white hover:from-[#e06e00] hover:to-[#e6a000] disabled:opacity-60 shadow-sm shadow-orange-500/20">
+                  {saving ? 'Saving...' : contactModal.mode === 'add' ? 'Add Business' : 'Save Changes'}
+                </button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}
