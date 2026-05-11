@@ -279,6 +279,8 @@ export default function ClientPortal() {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [territoryData, setTerritoryData] = useState({ states: [] })
+  const LAST_TERRITORY_KEY = 'ailocity_last_territory_session'
+  const lastTerritoryRef = useRef({})
   const [selectedState, setSelectedState] = useState('')
   const [selectedCity, setSelectedCity] = useState('')
   const [selectedRegion, setSelectedRegion] = useState('')
@@ -454,7 +456,7 @@ export default function ClientPortal() {
         setContactForm(p => {
           const next = { ...p }
           for (const [k, v] of Object.entries(res.data)) {
-            if (v && String(v).trim() && !next[k]?.trim()) next[k] = String(v).trim()
+            if (v && String(v).trim()) next[k] = String(v).trim()
           }
           return next
         })
@@ -471,10 +473,11 @@ export default function ClientPortal() {
     setContactLogoUploading(false)
     setContactStep(1)
     setAiPrompt('')
-    setSelectedState('')
-    setSelectedCity('')
-    setSelectedRegion('')
-    setSelectedPod('')
+    const lt = (() => { try { return JSON.parse(sessionStorage.getItem(LAST_TERRITORY_KEY) || '{}') } catch { return {} } })()
+    setSelectedState(lt.stateId || '')
+    setSelectedCity(lt.cityId || '')
+    setSelectedRegion(lt.regionId || '')
+    setSelectedPod(lt.podId || '')
     // Load territory data
     if (territoryData.states.length === 0) {
       setTerritoryLoading(true)
@@ -1938,7 +1941,10 @@ export default function ClientPortal() {
                     <button
                       type="button"
                       disabled={!selectedState || !selectedCity || !selectedRegion || !selectedPod}
-                      onClick={() => setContactStep(2)}
+                      onClick={() => {
+                        sessionStorage.setItem(LAST_TERRITORY_KEY, JSON.stringify({ stateId: selectedState, cityId: selectedCity, regionId: selectedRegion, podId: selectedPod }))
+                        setContactStep(2)
+                      }}
                       className="rounded-lg bg-gradient-to-r from-[#FF7A00] to-[#FFB000] px-5 py-2 text-sm font-medium text-white hover:from-[#e06e00] hover:to-[#e6a000] disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-orange-500/20"
                     >
                       Next: Business Details →
