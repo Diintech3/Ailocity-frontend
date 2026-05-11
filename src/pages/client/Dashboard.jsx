@@ -5,7 +5,7 @@ import {
   FileText, Share2, Radio, Bot, Database, Workflow, PlayCircle,
   Users, Briefcase, Shield, Scale, Calculator, Receipt, BadgeCheck,
   Landmark, TrendingUp, ChevronDown, ChevronRight, LogOut, Menu, X,
-  CreditCard, PhoneCall, Ticket, Film, Video,
+  CreditCard, PhoneCall, Ticket, Film, Video, Bell,
 } from 'lucide-react'
 import { api, TOKEN_SUBCLIENT } from '../../lib/api'
 
@@ -143,6 +143,7 @@ export default function ClientDashboard() {
   const dropRef = useRef(null)
   const [settingsTab, setSettingsTab] = useState('vectorise')
   const [profileTab, setProfileTab] = useState('profile')
+  const [clientMeetings, setClientMeetings] = useState([])
   const [dsModal, setDsModal] = useState(false)
   const [dsForm, setDsForm] = useState({ type: '', title: '', description: '', websiteUrl: '', fileKey: '', fileName: '', uploading: false })
   const [dsSaving, setDsSaving] = useState(false)
@@ -180,17 +181,19 @@ export default function ClientDashboard() {
   }, [])
 
   const load = useCallback(async () => {
-    const [meRes, dashRes, creditsRes, datastoreRes, productsRes, servicesRes] = await Promise.all([
+    const [meRes, dashRes, creditsRes, datastoreRes, productsRes, servicesRes, myMeetingsRes] = await Promise.all([
       api('/api/business/me', { token }),
       api('/api/business/dashboard', { token }),
       api('/api/business/credits', { token }),
       api('/api/business/datastore', { token }),
       api('/api/business/products', { token }),
       api('/api/business/services', { token }),
+      api('/api/business/my-meetings', { token }),
     ])
     setMe(meRes)
     setDash({ ...dashRes, datastore: datastoreRes.items || [], products: productsRes.products || [], services: servicesRes.services || [] })
     setCredits(creditsRes)
+    setClientMeetings(myMeetingsRes.meetings || [])
   }, [token])
 
   useEffect(() => {
@@ -322,6 +325,7 @@ export default function ClientDashboard() {
           {[
             { id: 'ai-credits', label: 'Credits', icon: CreditCard },
             { id: 'ai-tickets', label: 'Tickets', icon: Ticket },
+            { id: 'notifications', label: 'Notifications', icon: Bell },
             { id: 'settings',   label: 'Settings', icon: Settings },
           ].map(tab => (
             <button
@@ -1360,8 +1364,72 @@ export default function ClientDashboard() {
             </div>
           )}
 
+          {/* Notifications */}
+          {!loading && active === 'notifications' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Notifications</h2>
+                  <p className="text-slate-500 text-sm mt-1">Meetings scheduled for you</p>
+                </div>
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full px-4 py-1.5">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="text-emerald-700 text-xs font-semibold">Email alerts enabled</span>
+                </div>
+              </div>
+              {clientMeetings.length === 0 ? (
+                <div className="bg-white border border-slate-200 rounded-xl p-10 shadow-sm flex flex-col items-center justify-center text-center gap-3">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
+                    <Bell size={28} className="text-white" />
+                  </div>
+                  <p className="text-slate-800 font-semibold">No meetings scheduled yet</p>
+                  <p className="text-slate-500 text-sm max-w-sm">You will receive an email notification whenever a meeting is scheduled for you.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {clientMeetings.map((m) => {
+                    const statusColor = m.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : m.status === 'cancelled' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700'
+                    const outcomeColor = m.outcome === 'positive' ? 'bg-emerald-100 text-emerald-700' : m.outcome === 'negative' ? 'bg-red-100 text-red-700' : m.outcome === 'neutral' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                    return (
+                      <div key={m.id} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                        <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg,#FF7A00,#FFB000)' }} />
+                        <div className="px-5 py-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-slate-900 text-sm leading-snug">{m.agenda}</p>
+                              <p className="text-xs text-slate-500 mt-1">
+                                {m.scheduledAt ? new Date(m.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${statusColor}`}>{m.status}</span>
+                              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${outcomeColor}`}>{m.outcome}</span>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {[
+                              ['Server', m.serverName],
+                              ['BD Assigned', m.assignBdName],
+                              ['Contact Person', m.contactPerson],
+                              ['Contact No.', m.contactNumber],
+                            ].map(([label, value]) => (
+                              <div key={label}>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</p>
+                                <p className="text-xs font-semibold text-slate-800 mt-0.5">{value || '—'}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Coming Soon for all other tabs */}
-          {!loading && active !== 'overview' && active !== 'business-profile' && active !== 'business-products' && active !== 'business-services' && active !== 'tools' && active !== 'ai-credits' && active !== 'ai-tickets' && active !== 'settings' && (() => {
+          {!loading && active !== 'overview' && active !== 'business-profile' && active !== 'business-products' && active !== 'business-services' && active !== 'tools' && active !== 'ai-credits' && active !== 'ai-tickets' && active !== 'notifications' && active !== 'settings' && (() => {
             const allTabs = NAV_SECTIONS.flatMap(s => s.children || [])
             const tab = allTabs.find(t => t.id === active)
             if (!tab) return null

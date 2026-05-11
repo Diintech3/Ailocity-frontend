@@ -16,10 +16,12 @@ const MAIN_TABS = [
   { id: 'ai-agent', label: 'AI Agent', icon: Bot },
   { id: 'ai-calls', label: 'AI Calls', icon: PhoneCall },
   { id: 'trainings', label: 'Trainings', icon: BookOpen },
-  { id: 'help', label: 'Help', icon: HelpCircle },
 ]
 
-const BOTTOM_TABS = [{ id: 'settings', label: 'Settings', icon: Settings }]
+const BOTTOM_TABS = [
+  { id: 'help', label: 'Help', icon: HelpCircle },
+  { id: 'settings', label: 'Settings', icon: Settings },
+]
 
 const STATUS_COLORS = {
   new: 'bg-blue-100 text-blue-700',
@@ -153,6 +155,9 @@ const BLANK_MEETING = {
   noteForBd: '',
   status: 'pending',
   outcome: 'waiting',
+  notifyServer: true,
+  notifyClient: true,
+  notifyBd: true,
 }
 
 const BLANK_DIAL_REP = { title: '', summary: '', notes: '', periodLabel: '' }
@@ -164,27 +169,27 @@ const BLANK_AI_CALL = { direction: 'inbound', party: '', phone: '', durationSec:
 const BUSINESS_PER_PAGE = 20
 
 /** Industrial modal / form chrome (readable 16px+ body, clear hierarchy). */
-const tcLabel = 'block text-sm font-semibold tracking-tight text-neutral-900 mb-1.5'
+const tcLabel = 'block text-xs font-semibold text-neutral-700 mb-1 uppercase tracking-wide'
 const tcInput =
-  'w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-neutral-900 shadow-sm placeholder:text-slate-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20'
-const tcSelect = `${tcInput} appearance-none bg-white cursor-pointer capitalize`
-const tcTextarea = `${tcInput} min-h-[96px] resize-y leading-relaxed`
-const tcModalOverlay = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[1px]'
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-slate-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-colors'
+const tcSelect = `${tcInput} appearance-none cursor-pointer capitalize`
+const tcTextarea = `${tcInput} min-h-[72px] resize-y leading-relaxed`
+const tcModalOverlay = 'fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4'
 const tcModalPanel =
-  'relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] max-h-[92vh] overflow-y-auto'
-const tcModalHeader = 'flex items-start justify-between gap-3 border-b border-slate-200 px-6 py-4 sticky top-0 bg-white z-[1]'
-const tcModalTitle = 'text-lg font-bold text-neutral-950 leading-tight pr-8'
-const tcModalSub = 'text-sm text-neutral-600 mt-1 font-normal'
-const tcModalBody = 'px-6 py-5 space-y-4'
+  'relative w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[90vh]'
+const tcModalHeader = 'flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-3 flex-shrink-0 bg-white rounded-t-xl'
+const tcModalTitle = 'text-sm font-bold text-neutral-950 leading-tight'
+const tcModalSub = 'text-xs text-neutral-500 mt-0.5 font-normal'
+const tcModalBody = 'px-5 py-3 space-y-3 flex-1 overflow-y-auto'
 const tcModalFooter =
-  'flex flex-wrap justify-end gap-3 border-t border-slate-100 px-6 py-4 bg-slate-50/80 rounded-b-2xl'
+  'flex flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-3 bg-slate-50 rounded-b-xl flex-shrink-0'
 const tcBtnGhost =
-  'rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-base font-medium text-neutral-800 hover:bg-slate-50 active:bg-slate-100 transition-colors'
+  'rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-sm font-medium text-neutral-800 hover:bg-slate-50 transition-colors'
 const tcBtnPrimary =
-  'rounded-xl px-6 py-2.5 text-base font-semibold text-white shadow-md hover:brightness-105 active:brightness-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed'
+  'rounded-lg px-4 py-1.5 text-sm font-semibold text-white shadow-sm hover:brightness-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed'
 
 const tcDropdown =
-  'absolute right-0 top-full z-40 mt-1 w-[11.5rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)]'
+  'absolute right-2 top-full z-[9999] mt-2 w-[11.5rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)]'
 const tcDropdownItem =
   'flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-base font-medium text-neutral-800 hover:bg-slate-50 active:bg-slate-100'
 const tcDropdownItemDanger =
@@ -245,7 +250,6 @@ export default function TCDashboard() {
   useEffect(() => {
     const h = (e) => {
       if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false)
-      if (menuRef.current && !menuRef.current.contains(e.target)) setTcActionMenu(null)
     }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
@@ -372,9 +376,28 @@ export default function TCDashboard() {
   const saveMeeting = async () => {
     if (!meetingForm.agenda.trim()) return alert('Agenda is required')
     if (!meetingForm.scheduledAt) return alert('Date & time is required')
+    if (!meetingForm.clientContactId && !meetingForm.serverContactId) return alert('Please select at least one Server Contact or Client Contact to send notifications')
     setMeetingSaving(true)
     try {
-      const body = { ...meetingForm }
+      const body = {
+        serverContactId:  meetingForm.serverContactId,
+        serverName:       meetingForm.serverName,
+        clientContactId:  meetingForm.clientContactId,
+        clientName:       meetingForm.clientName,
+        assignBdId:       meetingForm.assignBdId,
+        assignBdName:     meetingForm.assignBdName,
+        agenda:           meetingForm.agenda,
+        scheduledAt:      meetingForm.scheduledAt,
+        disposition:      meetingForm.disposition,
+        contactPerson:    meetingForm.contactPerson,
+        contactNumber:    meetingForm.contactNumber,
+        noteForBd:        meetingForm.noteForBd,
+        status:           meetingForm.status,
+        outcome:          meetingForm.outcome,
+        notifyServer:     meetingForm.notifyServer ?? true,
+        notifyClient:     meetingForm.notifyClient ?? true,
+        notifyBd:         meetingForm.notifyBd     ?? true,
+      }
       if (meetingModal.mode === 'add') {
         await api('/api/business/meetings', { token, method: 'POST', body })
       } else {
@@ -898,56 +921,51 @@ export default function TCDashboard() {
                       <Plus size={16} /> Add report
                     </button>
                   </div>
-                  <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden w-full min-w-0">
+                  <div className="bg-white border border-slate-200 rounded-xl shadow-sm w-full min-w-0" style={{ overflow: 'visible' }}>
                     <table className="w-full table-fixed border-collapse">
                       <colgroup>
+                        <col className="w-[5%]" />
                         <col className="w-[20%]" />
                         <col className="w-[12%]" />
-                        <col className="w-[40%]" />
+                        <col className="w-[38%]" />
                         <col className="w-[15%]" />
-                        <col className="w-[13%]" />
+                        <col className="w-[10%]" />
                       </colgroup>
-                      <thead className="bg-slate-50 border-b border-slate-200">
+                      <thead className="bg-slate-50 border-b-2 border-slate-200">
                         <tr>
-                          {['Title', 'Period', 'Summary', 'Created'].map((h) => (
-                            <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                          {['#', 'Title', 'Period', 'Summary', 'Created', ''].map((h) => (
+                            <th key={h} className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600">
                               {h}
                             </th>
                           ))}
-                          <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                            <span className="sr-only">Actions</span>
-                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {dialReports.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">
+                            <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
                               No dial reports yet.
                             </td>
                           </tr>
                         ) : (
-                          [...dialReports].reverse().map((r) => (
-                            <tr key={r.id}>
-                              <td className="min-w-0 px-3 py-2 align-top">
-                                <p className="line-clamp-2 text-xs font-semibold text-neutral-900" title={tcDisplay(r.title)}>
+                          [...dialReports].reverse().map((r, idx) => (
+                            <tr key={r.id} className="hover:bg-orange-50/40 transition-colors">
+                              <td className="px-3 py-3 align-middle">
+                                <p className="text-sm font-bold text-neutral-500 tabular-nums">{idx + 1}</p>
+                              </td>
+                              <td className="px-3 py-3 align-middle">
+                                <p className="text-sm font-bold text-neutral-900 line-clamp-2" title={tcDisplay(r.title)}>
                                   {tcDisplay(r.title)}
                                 </p>
                               </td>
-                              <td className="min-w-0 px-3 py-2 align-top">
-                                <p className="truncate text-xs text-slate-600" title={tcDisplay(r.periodLabel)}>
-                                  {tcDisplay(r.periodLabel)}
-                                </p>
+                              <td className="px-3 py-3 align-middle">
+                                <p className="text-sm font-medium text-slate-600 truncate">{tcDisplay(r.periodLabel)}</p>
                               </td>
-                              <td className="min-w-0 px-3 py-2 align-top">
-                                <p className="line-clamp-2 text-xs text-slate-600" title={tcDisplay(r.summary)}>
-                                  {tcDisplay(r.summary)}
-                                </p>
+                              <td className="px-3 py-3 align-middle">
+                                <p className="text-sm text-slate-600 line-clamp-2">{tcDisplay(r.summary)}</p>
                               </td>
-                              <td className="min-w-0 px-3 py-2 align-top">
-                                <p className="truncate text-[11px] text-slate-500" title={fmtDt(r.createdAt)}>
-                                  {fmtDt(r.createdAt)}
-                                </p>
+                              <td className="px-3 py-3 align-middle">
+                                <p className="text-xs font-medium text-slate-500 whitespace-nowrap">{fmtDt(r.createdAt)}</p>
                               </td>
                               <td
                                 className="relative min-w-0 px-1 py-2 text-center align-middle"
@@ -966,7 +984,7 @@ export default function TCDashboard() {
                                   <Settings2 size={18} aria-hidden strokeWidth={2} />
                                 </button>
                                 {tcActionMenu?.kind === 'report' && tcActionMenu?.id === r.id && (
-                                  <div className={tcDropdown}>
+                                  <div className={tcDropdown} onClick={e => e.stopPropagation()}>
                                     <button
                                       type="button"
                                       className={tcDropdownItem}
@@ -1085,64 +1103,59 @@ export default function TCDashboard() {
                       <Plus size={16} /> Log call
                     </button>
                   </div>
-                  <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden w-full min-w-0">
+                  <div className="bg-white border border-slate-200 rounded-xl shadow-sm w-full min-w-0" style={{ overflow: 'visible' }}>
                     <table className="w-full table-fixed border-collapse">
                       <colgroup>
-                        <col className="w-[14%]" />
-                        <col className="w-[11%]" />
+                        <col className="w-[4%]" />
+                        <col className="w-[15%]" />
+                        <col className="w-[12%]" />
                         <col className="w-[8%]" />
-                        <col className="w-[10%]" />
-                        <col className="w-[30%]" />
-                        <col className="w-[14%]" />
+                        <col className="w-[11%]" />
+                        <col className="w-[32%]" />
                         <col className="w-[13%]" />
+                        <col className="w-[5%]" />
                       </colgroup>
-                      <thead className="bg-slate-50 border-b border-slate-200">
+                      <thead className="bg-slate-50 border-b-2 border-slate-200">
                         <tr>
-                          {['Party', 'Phone', 'Dur (s)', 'Disp.', 'Notes', 'Time'].map((h) => (
-                            <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                          {['#', 'Party', 'Phone', 'Dur', 'Disposition', 'Notes', 'Time', ''].map((h) => (
+                            <th key={h} className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600">
                               {h}
                             </th>
                           ))}
-                          <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                            <span className="sr-only">Actions</span>
-                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {dialCalls.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
+                            <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-400">
                               No dial calls logged.
                             </td>
                           </tr>
                         ) : (
-                          [...dialCalls].reverse().map((c) => (
-                            <tr key={c.id}>
-                              <td className="min-w-0 px-3 py-2 align-top">
-                                <p className="truncate text-xs font-semibold text-neutral-900" title={tcDisplay(c.partyName)}>
+                          [...dialCalls].reverse().map((c, idx) => (
+                            <tr key={c.id} className="hover:bg-orange-50/40 transition-colors">
+                              <td className="px-3 py-3 align-middle">
+                                <p className="text-sm font-bold text-neutral-500 tabular-nums">{idx + 1}</p>
+                              </td>
+                              <td className="px-3 py-3 align-middle">
+                                <p className="text-sm font-bold text-neutral-900 truncate" title={tcDisplay(c.partyName)}>
                                   {tcDisplay(c.partyName)}
                                 </p>
                               </td>
-                              <td className="min-w-0 px-3 py-2 align-top">
-                                <p className="truncate text-xs text-slate-700" title={tcDisplay(c.phone)}>
-                                  {tcDisplay(c.phone)}
-                                </p>
+                              <td className="px-3 py-3 align-middle">
+                                <p className="text-sm font-medium text-slate-700 truncate">{tcDisplay(c.phone)}</p>
                               </td>
-                              <td className="min-w-0 px-3 py-2 align-top">
-                                <p className="truncate text-xs text-slate-700">{tcDisplay(c.durationSec)}</p>
+                              <td className="px-3 py-3 align-middle">
+                                <p className="text-sm font-medium text-slate-700">{c.durationSec ? `${c.durationSec}s` : '—'}</p>
                               </td>
-                              <td className="min-w-0 px-3 py-2 align-top">
-                                <p className="truncate text-xs text-slate-700" title={tcDisplay(c.disposition)}>
-                                  {tcDisplay(c.disposition)}
-                                </p>
+                              <td className="px-3 py-3 align-middle">
+                                <p className="text-sm font-medium text-slate-700 truncate">{tcDisplay(c.disposition)}</p>
                               </td>
-                              <td className="min-w-0 px-3 py-2 align-top">
-                                <p className="line-clamp-2 text-xs text-slate-600" title={tcDisplay(c.notes)}>
-                                  {tcDisplay(c.notes)}
-                                </p>
+                              <td className="px-3 py-3 align-middle">
+                                <p className="text-sm text-slate-600 line-clamp-2">{tcDisplay(c.notes)}</p>
                               </td>
-                              <td className="min-w-0 px-3 py-2 align-top">
-                                <p className="truncate text-[11px] text-slate-500">{fmtDt(c.createdAt)}</p>
+                              <td className="px-3 py-3 align-middle">
+                                <p className="text-xs font-medium text-slate-500 whitespace-nowrap">{fmtDt(c.createdAt)}</p>
                               </td>
                               <td
                                 className="relative min-w-0 px-1 py-2 text-center align-middle"
@@ -1161,7 +1174,7 @@ export default function TCDashboard() {
                                   <Settings2 size={18} aria-hidden strokeWidth={2} />
                                 </button>
                                 {tcActionMenu?.kind === 'dial' && tcActionMenu?.id === c.id && (
-                                  <div className={tcDropdown}>
+                                  <div className={tcDropdown} onClick={e => e.stopPropagation()}>
                                     <button
                                       type="button"
                                       className={tcDropdownItem}
@@ -1276,178 +1289,113 @@ export default function TCDashboard() {
                 )}
               </div>
 
-              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden w-full min-w-0">
-                <table className="w-full table-fixed border-collapse">
-                  <colgroup>
-                    <col className="w-[14%]" />
-                    <col className="w-[9%]" />
-                    <col className="w-[8%]" />
-                    <col className="w-[8%]" />
-                    <col className="w-[8%]" />
-                    <col className="w-[7%]" />
-                    <col className="w-[13%]" />
-                    <col className="w-[7%]" />
-                    <col className="w-[7%]" />
-                    <col className="w-[8%]" />
-                    <col className="w-[8%]" />
-                    <col className="w-[3%]" />
-                  </colgroup>
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      {[
-                        'Agenda',
-                        'When',
-                        'Server',
-                        'Client',
-                        'BD',
-                        'Disp.',
-                        'Contact',
-                        'Status',
-                        'Outcome',
-                        'Created',
-                        'Updated',
-                        '',
-                      ].map((h, i) => (
-                        <th
-                          key={`${h || 'menu'}-${i}`}
-                          className={`px-2 py-2.5 align-bottom text-[10px] font-semibold uppercase tracking-wider text-slate-500 ${h === '' ? 'text-center' : 'text-left'} ${i === 11 ? 'w-[3rem]' : ''}`}
-                          scope="col"
-                        >
-                          {h === '' ? <span className="sr-only">Row actions</span> : h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredMeetings.length === 0 ? (
-                      <tr>
-                        <td colSpan={12} className="px-6 py-12 text-center text-sm text-slate-400">
-                          No meetings in this range.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredMeetings.map((m) => (
-                        <tr key={m.id} className="hover:bg-slate-50/70">
-                          <td className="min-w-0 px-2 py-2 align-top">
-                            <p className="line-clamp-2 text-xs font-semibold leading-snug text-neutral-900" title={tcDisplay(m.agenda)}>
-                              {tcDisplay(m.agenda)}
-                            </p>
-                          </td>
-                          <td className="min-w-0 px-2 py-2 align-top">
-                            <p className="truncate text-[11px] leading-snug text-slate-600" title={fmtDt(m.scheduledAt)}>
-                              {fmtDt(m.scheduledAt)}
-                            </p>
-                          </td>
-                          <td className="min-w-0 px-2 py-2 align-top">
-                            <p className="truncate text-xs text-slate-800" title={tcDisplay(m.serverName)}>
-                              {tcDisplay(m.serverName)}
-                            </p>
-                          </td>
-                          <td className="min-w-0 px-2 py-2 align-top">
-                            <p className="truncate text-xs text-slate-800" title={tcDisplay(m.clientName)}>
-                              {tcDisplay(m.clientName)}
-                            </p>
-                          </td>
-                          <td className="min-w-0 px-2 py-2 align-top">
-                            <p className="truncate text-xs text-slate-800" title={tcDisplay(m.assignBdName)}>
-                              {tcDisplay(m.assignBdName)}
-                            </p>
-                          </td>
-                          <td className="min-w-0 px-2 py-2 align-top">
-                            <span
-                              className="inline-flex max-w-full truncate rounded-full bg-orange-50 px-1.5 py-px text-[10px] font-semibold capitalize text-orange-800"
-                              title={tcDisplay(m.disposition)}
-                            >
-                              {tcDisplay(m.disposition)}
-                            </span>
-                          </td>
-                          <td className="min-w-0 px-2 py-2 align-top">
-                            <div className="line-clamp-2 text-[11px] leading-snug text-slate-800" title={`${tcDisplay(m.contactPerson)} · ${tcDisplay(m.contactNumber)}`}>
-                              <span className="block truncate">{tcDisplay(m.contactPerson)}</span>
-                              <span className="block truncate text-slate-500">{tcDisplay(m.contactNumber)}</span>
-                            </div>
-                          </td>
-                          <td className="min-w-0 px-2 py-2 align-top">
-                            <span
-                              className={`inline-flex max-w-full truncate rounded-full px-1.5 py-px text-[10px] font-semibold capitalize ${pill(m.status)}`}
-                              title={tcDisplay(m.status)}
-                            >
-                              {tcDisplay(m.status)}
-                            </span>
-                          </td>
-                          <td className="min-w-0 px-2 py-2 align-top">
-                            <span
-                              className={`inline-flex max-w-full truncate rounded-full px-1.5 py-px text-[10px] font-semibold capitalize ${pill(m.outcome)}`}
-                              title={tcDisplay(m.outcome)}
-                            >
-                              {tcDisplay(m.outcome)}
-                            </span>
-                          </td>
-                          <td className="min-w-0 px-2 py-2 align-top">
-                            <p className="truncate text-[11px] text-slate-500" title={fmtDt(m.createdAt)}>
-                              {fmtDt(m.createdAt)}
-                            </p>
-                          </td>
-                          <td className="min-w-0 px-2 py-2 align-top">
-                            <p className="truncate text-[11px] text-slate-500" title={fmtDt(m.updatedAt)}>
-                              {fmtDt(m.updatedAt)}
-                            </p>
-                          </td>
-                          <td
-                            className="relative min-w-0 px-1 py-2 text-center align-middle"
-                            ref={tcActionMenu?.kind === 'meeting' && tcActionMenu?.id === m.id ? menuRef : null}
-                          >
+              {filteredMeetings.length === 0 ? (
+                <div className="bg-white border border-dashed border-slate-300 rounded-2xl px-6 py-16 text-center shadow-sm">
+                  <FileText size={32} className="mx-auto mb-3 text-slate-300" />
+                  <p className="text-sm font-medium text-slate-400">No meetings in this range</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {filteredMeetings.map((m) => (
+                    <div
+                      key={m.id}
+                      className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-lg transition-all duration-200 flex flex-col overflow-hidden"
+                    >
+                      {/* Top accent bar */}
+                      <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg,#FF7A00,#FFB000)' }} />
+
+                      {/* Header */}
+                      <div className="flex items-start justify-between gap-3 px-4 pt-3 pb-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[15px] font-bold text-neutral-900 leading-snug line-clamp-2 mb-1">
+                            {tcDisplay(m.agenda)}
+                          </p>
+                          <div className="flex items-center gap-1.5 text-slate-400">
+                            <FileText size={12} className="shrink-0" />
+                            <span className="text-[11px] font-medium">{fmtDt(m.scheduledAt)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${pill(m.status)}`}>
+                            {tcDisplay(m.status)}
+                          </span>
+                          <div className="relative">
                             <button
                               type="button"
-                              aria-label="Row actions"
-                              className="inline-flex rounded-lg border border-transparent p-2 text-slate-600 hover:border-slate-200 hover:bg-slate-50"
-                              onClick={() =>
-                                setTcActionMenu((cur) =>
-                                  cur?.kind === 'meeting' && cur?.id === m.id ? null : { kind: 'meeting', id: m.id }
-                                )
-                              }
+                              className="p-1.5 rounded-lg text-slate-400 hover:bg-orange-50 hover:text-orange-500 transition-colors"
+                              onClick={() => setTcActionMenu((cur) => cur?.kind === 'meeting' && cur?.id === m.id ? null : { kind: 'meeting', id: m.id })}
                             >
-                              <Settings2 size={18} aria-hidden strokeWidth={2} />
+                              <Settings2 size={15} strokeWidth={2} />
                             </button>
                             {tcActionMenu?.kind === 'meeting' && tcActionMenu?.id === m.id && (
-                              <div className={tcDropdown}>
-                                <button
-                                  type="button"
-                                  className={tcDropdownItem}
-                                  onClick={() => {
-                                    setTcActionMenu(null)
-                                    setViewMeeting(m)
-                                  }}
-                                >
-                                  <Eye size={17} aria-hidden /> View
+                              <div
+                                className="absolute right-0 z-[9999] mt-1 w-[10rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl"
+                                style={{ top: '100%' }}
+                                onClick={e => e.stopPropagation()}
+                              >
+                                <button type="button" className={tcDropdownItem} onClick={() => { setTcActionMenu(null); setViewMeeting(m) }}>
+                                  <Eye size={14} /> View
                                 </button>
-                                <button
-                                  type="button"
-                                  className={tcDropdownItem}
-                                  onClick={() => {
-                                    setTcActionMenu(null)
-                                    setMeetingForm({
-                                      ...BLANK_MEETING,
-                                      ...m,
-                                      scheduledAt: m.scheduledAt ? String(m.scheduledAt).slice(0, 16) : '',
-                                    })
-                                    setMeetingModal({ open: true, mode: 'edit', item: m })
-                                  }}
-                                >
-                                  <Pencil size={17} aria-hidden /> Edit
+                                <button type="button" className={tcDropdownItem} onClick={() => { setTcActionMenu(null); setMeetingForm({ ...BLANK_MEETING, ...m, scheduledAt: m.scheduledAt ? String(m.scheduledAt).slice(0, 16) : '' }); setMeetingModal({ open: true, mode: 'edit', item: m }) }}>
+                                  <Pencil size={14} /> Edit
                                 </button>
                                 <button type="button" className={tcDropdownItemDanger} onClick={() => deleteMeeting(m.id)}>
-                                  <Trash2 size={17} aria-hidden /> Delete
+                                  <Trash2 size={14} /> Delete
                                 </button>
                               </div>
                             )}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Divider */}
+                      <div className="mx-4 border-t border-slate-100" />
+
+                      {/* Body */}
+                      <div className="px-4 py-3 flex-1 space-y-3">
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                          {[
+                            { label: 'Server', value: m.serverName },
+                            { label: 'Client', value: m.clientName },
+                            { label: 'BD Assigned', value: m.assignBdName },
+                            { label: 'Contact Person', value: m.contactPerson },
+                            { label: 'Contact No.', value: m.contactNumber },
+                          ].map(({ label, value }) => (
+                            <div key={label}>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{label}</p>
+                              <p className="text-[13px] font-semibold text-neutral-800 truncate">{tcDisplay(value)}</p>
+                            </div>
+                          ))}
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Disposition</p>
+                            <span className="inline-block rounded-full bg-orange-50 border border-orange-200 px-2.5 py-0.5 text-[11px] font-bold capitalize text-orange-600">
+                              {tcDisplay(m.disposition)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {m.noteForBd && (
+                          <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500 mb-1">Note for BD</p>
+                            <p className="text-[12px] text-neutral-700 leading-relaxed line-clamp-2">{m.noteForBd}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer */}
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-t border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Outcome</span>
+                          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${pill(m.outcome)}`}>
+                            {tcDisplay(m.outcome)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 font-medium">{fmtDt(m.updatedAt)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1528,7 +1476,7 @@ export default function TCDashboard() {
                   <Plus size={16} /> Add AI call
                 </button>
               </div>
-              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden w-full min-w-0">
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm w-full min-w-0" style={{ overflow: 'visible' }}>
                 <table className="w-full table-fixed border-collapse">
                   <colgroup>
                     <col className="w-[20%]" />
@@ -1607,7 +1555,7 @@ export default function TCDashboard() {
                               <Settings2 size={18} aria-hidden strokeWidth={2} />
                             </button>
                             {tcActionMenu?.kind === 'aicall' && tcActionMenu?.id === c.id && (
-                              <div className={tcDropdown}>
+                              <div className={tcDropdown} onClick={e => e.stopPropagation()}>
                                 <button
                                   type="button"
                                   className={tcDropdownItem}
@@ -1684,7 +1632,7 @@ export default function TCDashboard() {
                   <Plus size={16} /> Add training
                 </button>
               </div>
-              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden w-full min-w-0">
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm w-full min-w-0" style={{ overflow: 'visible' }}>
                 <table className="w-full table-fixed border-collapse">
                   <colgroup>
                     <col className="w-[28%]" />
@@ -1759,7 +1707,7 @@ export default function TCDashboard() {
                               <Settings2 size={18} aria-hidden strokeWidth={2} />
                             </button>
                             {tcActionMenu?.kind === 'training' && tcActionMenu?.id === tRow.id && (
-                              <div className={tcDropdown}>
+                              <div className={tcDropdown} onClick={e => e.stopPropagation()}>
                                 <button
                                   type="button"
                                   className={tcDropdownItem}
@@ -1870,40 +1818,70 @@ export default function TCDashboard() {
         <div className={tcModalOverlay} onClick={() => setViewMeeting(null)}>
           <div className={tcModalPanel} onClick={(e) => e.stopPropagation()}>
             <div className={tcModalHeader}>
-              <div>
-                <h2 className={tcModalTitle}>Meeting</h2>
-                <p className={tcModalSub}>Read-only view</p>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:'linear-gradient(135deg,#FF7A00,#FFB000)'}}>
+                  <FileText size={16} className="text-white" />
+                </div>
+                <div>
+                  <h2 className={tcModalTitle}>Meeting Details</h2>
+                  <p className={tcModalSub}>{fmtDt(viewMeeting.scheduledAt)}</p>
+                </div>
               </div>
-              <button type="button" onClick={() => setViewMeeting(null)} className="p-2 rounded-xl text-slate-600 hover:bg-slate-100">
-                <X size={18} />
+              <button type="button" onClick={() => setViewMeeting(null)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100">
+                <X size={16} />
               </button>
             </div>
             <div className={tcModalBody}>
-              {[
-                ['Server', viewMeeting.serverName],
-                ['Client', viewMeeting.clientName],
-                ['BD', viewMeeting.assignBdName],
-                ['Agenda', viewMeeting.agenda],
-                ['When', fmtDt(viewMeeting.scheduledAt)],
-                ['Disposition', viewMeeting.disposition],
-                ['Status', viewMeeting.status],
-                ['Outcome', viewMeeting.outcome],
-                ['Contact person', viewMeeting.contactPerson],
-                ['Contact number', viewMeeting.contactNumber],
-                ['Note for BD', viewMeeting.noteForBd],
-                ['Created', fmtDt(viewMeeting.createdAt)],
-                ['Updated', fmtDt(viewMeeting.updatedAt)],
-              ].map(([k, v]) => (
-                <div key={k} className="grid grid-cols-12 gap-3">
-                  <div className="col-span-4 text-sm font-semibold text-slate-700">{k}</div>
-                  <div className="col-span-8 text-sm text-neutral-900 break-words whitespace-pre-wrap">{tcDisplay(v)}</div>
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  ['Server', viewMeeting.serverName],
+                  ['Client', viewMeeting.clientName],
+                  ['BD Assigned', viewMeeting.assignBdName],
+                  ['Contact Person', viewMeeting.contactPerson],
+                  ['Contact Number', viewMeeting.contactNumber],
+                  ['Disposition', viewMeeting.disposition],
+                ].map(([k, v]) => (
+                  <div key={k} className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">{k}</p>
+                    <p className="text-sm font-semibold text-neutral-900 capitalize">{tcDisplay(v)}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-slate-50 rounded-lg px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Agenda</p>
+                <p className="text-sm text-neutral-900 whitespace-pre-wrap">{tcDisplay(viewMeeting.agenda)}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  ['Status', viewMeeting.status],
+                  ['Outcome', viewMeeting.outcome],
+                ].map(([k, v]) => (
+                  <div key={k} className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">{k}</p>
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${pill(v)}`}>{tcDisplay(v)}</span>
+                  </div>
+                ))}
+              </div>
+              {viewMeeting.noteForBd && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 mb-0.5">Note for BD</p>
+                  <p className="text-sm text-neutral-900 whitespace-pre-wrap">{viewMeeting.noteForBd}</p>
                 </div>
-              ))}
+              )}
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  ['Created', fmtDt(viewMeeting.createdAt)],
+                  ['Updated', fmtDt(viewMeeting.updatedAt)],
+                ].map(([k, v]) => (
+                  <div key={k} className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">{k}</p>
+                    <p className="text-xs text-neutral-700">{v}</p>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className={tcModalFooter}>
-              <button type="button" className={tcBtnGhost} onClick={() => setViewMeeting(null)}>
-                Close
-              </button>
+              <button type="button" className={tcBtnGhost} onClick={() => setViewMeeting(null)}>Close</button>
             </div>
           </div>
         </div>
@@ -1913,33 +1891,41 @@ export default function TCDashboard() {
         <div className={tcModalOverlay} onClick={() => setViewReport(null)}>
           <div className={tcModalPanel} onClick={(e) => e.stopPropagation()}>
             <div className={tcModalHeader}>
-              <div>
-                <h2 className={tcModalTitle}>Dial report</h2>
-                <p className={tcModalSub}>Read-only view</p>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:'linear-gradient(135deg,#FF7A00,#FFB000)'}}>
+                  <FileText size={16} className="text-white" />
+                </div>
+                <div>
+                  <h2 className={tcModalTitle}>{viewReport.title || 'Dial Report'}</h2>
+                  <p className={tcModalSub}>{viewReport.periodLabel || fmtDt(viewReport.createdAt)}</p>
+                </div>
               </div>
-              <button type="button" onClick={() => setViewReport(null)} className="p-2 rounded-xl text-slate-600 hover:bg-slate-100">
-                <X size={18} />
-              </button>
+              <button type="button" onClick={() => setViewReport(null)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X size={16} /></button>
             </div>
             <div className={tcModalBody}>
-              {[
-                ['Title', viewReport.title],
-                ['Period label', viewReport.periodLabel],
-                ['Summary', viewReport.summary],
-                ['Notes', viewReport.notes],
-                ['Created', fmtDt(viewReport.createdAt)],
-                ['Updated', fmtDt(viewReport.updatedAt)],
-              ].map(([k, v]) => (
-                <div key={k} className="grid grid-cols-12 gap-3">
-                  <div className="col-span-4 text-sm font-semibold text-slate-700">{k}</div>
-                  <div className="col-span-8 text-sm text-neutral-900 break-words whitespace-pre-wrap">{tcDisplay(v)}</div>
+              {viewReport.summary && (
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Summary</p>
+                  <p className="text-sm text-neutral-900 whitespace-pre-wrap">{viewReport.summary}</p>
                 </div>
-              ))}
+              )}
+              {viewReport.notes && (
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Notes</p>
+                  <p className="text-sm text-neutral-900 whitespace-pre-wrap">{viewReport.notes}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2.5">
+                {[['Created', fmtDt(viewReport.createdAt)], ['Updated', fmtDt(viewReport.updatedAt)]].map(([k, v]) => (
+                  <div key={k} className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">{k}</p>
+                    <p className="text-xs text-neutral-700">{v}</p>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className={tcModalFooter}>
-              <button type="button" className={tcBtnGhost} onClick={() => setViewReport(null)}>
-                Close
-              </button>
+              <button type="button" className={tcBtnGhost} onClick={() => setViewReport(null)}>Close</button>
             </div>
           </div>
         </div>
@@ -1949,34 +1935,47 @@ export default function TCDashboard() {
         <div className={tcModalOverlay} onClick={() => setViewDialCall(null)}>
           <div className={tcModalPanel} onClick={(e) => e.stopPropagation()}>
             <div className={tcModalHeader}>
-              <div>
-                <h2 className={tcModalTitle}>Dial call</h2>
-                <p className={tcModalSub}>Read-only view</p>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:'linear-gradient(135deg,#FF7A00,#FFB000)'}}>
+                  <PhoneCall size={16} className="text-white" />
+                </div>
+                <div>
+                  <h2 className={tcModalTitle}>{viewDialCall.partyName || 'Dial Call'}</h2>
+                  <p className={tcModalSub}>{fmtDt(viewDialCall.createdAt)}</p>
+                </div>
               </div>
-              <button type="button" onClick={() => setViewDialCall(null)} className="p-2 rounded-xl text-slate-600 hover:bg-slate-100">
-                <X size={18} />
-              </button>
+              <button type="button" onClick={() => setViewDialCall(null)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X size={16} /></button>
             </div>
             <div className={tcModalBody}>
-              {[
-                ['Party', viewDialCall.partyName],
-                ['Phone', viewDialCall.phone],
-                ['Duration (s)', viewDialCall.durationSec],
-                ['Disposition', viewDialCall.disposition],
-                ['Notes', viewDialCall.notes],
-                ['Created', fmtDt(viewDialCall.createdAt)],
-                ['Updated', fmtDt(viewDialCall.updatedAt)],
-              ].map(([k, v]) => (
-                <div key={k} className="grid grid-cols-12 gap-3">
-                  <div className="col-span-4 text-sm font-semibold text-slate-700">{k}</div>
-                  <div className="col-span-8 text-sm text-neutral-900 break-words whitespace-pre-wrap">{tcDisplay(v)}</div>
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  ['Phone', viewDialCall.phone],
+                  ['Duration (s)', viewDialCall.durationSec],
+                  ['Disposition', viewDialCall.disposition],
+                ].map(([k, v]) => (
+                  <div key={k} className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">{k}</p>
+                    <p className="text-sm font-semibold text-neutral-900">{tcDisplay(v)}</p>
+                  </div>
+                ))}
+              </div>
+              {viewDialCall.notes && (
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Notes</p>
+                  <p className="text-sm text-neutral-900 whitespace-pre-wrap">{viewDialCall.notes}</p>
                 </div>
-              ))}
+              )}
+              <div className="grid grid-cols-2 gap-2.5">
+                {[['Created', fmtDt(viewDialCall.createdAt)], ['Updated', fmtDt(viewDialCall.updatedAt)]].map(([k, v]) => (
+                  <div key={k} className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">{k}</p>
+                    <p className="text-xs text-neutral-700">{v}</p>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className={tcModalFooter}>
-              <button type="button" className={tcBtnGhost} onClick={() => setViewDialCall(null)}>
-                Close
-              </button>
+              <button type="button" className={tcBtnGhost} onClick={() => setViewDialCall(null)}>Close</button>
             </div>
           </div>
         </div>
@@ -1986,36 +1985,49 @@ export default function TCDashboard() {
         <div className={tcModalOverlay} onClick={() => setViewAiCall(null)}>
           <div className={tcModalPanel} onClick={(e) => e.stopPropagation()}>
             <div className={tcModalHeader}>
-              <div>
-                <h2 className={tcModalTitle}>AI call</h2>
-                <p className={tcModalSub}>Read-only view</p>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:'linear-gradient(135deg,#FF7A00,#FFB000)'}}>
+                  <Bot size={16} className="text-white" />
+                </div>
+                <div>
+                  <h2 className={tcModalTitle}>{viewAiCall.party || 'AI Call'}</h2>
+                  <p className={tcModalSub}><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${viewAiCall.direction === 'inbound' ? 'bg-violet-100 text-violet-700' : 'bg-cyan-100 text-cyan-700'}`}>{viewAiCall.direction}</span></p>
+                </div>
               </div>
-              <button type="button" onClick={() => setViewAiCall(null)} className="p-2 rounded-xl text-slate-600 hover:bg-slate-100">
-                <X size={18} />
-              </button>
+              <button type="button" onClick={() => setViewAiCall(null)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X size={16} /></button>
             </div>
             <div className={tcModalBody}>
-              {[
-                ['Direction', viewAiCall.direction],
-                ['Party', viewAiCall.party],
-                ['Phone', viewAiCall.phone],
-                ['Duration (s)', viewAiCall.durationSec],
-                ['Outcome', viewAiCall.outcome],
-                ['Status', viewAiCall.status],
-                ['Notes', viewAiCall.notes],
-                ['Created', fmtDt(viewAiCall.createdAt)],
-                ['Updated', fmtDt(viewAiCall.updatedAt)],
-              ].map(([k, v]) => (
-                <div key={k} className="grid grid-cols-12 gap-3">
-                  <div className="col-span-4 text-sm font-semibold text-slate-700">{k}</div>
-                  <div className="col-span-8 text-sm text-neutral-900 break-words whitespace-pre-wrap">{tcDisplay(v)}</div>
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  ['Phone', viewAiCall.phone],
+                  ['Duration (s)', viewAiCall.durationSec],
+                  ['Status', viewAiCall.status],
+                  ['Outcome', viewAiCall.outcome],
+                ].map(([k, v]) => (
+                  <div key={k} className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">{k}</p>
+                    {k === 'Status' ? <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${pill(v)}`}>{tcDisplay(v)}</span>
+                      : <p className="text-sm font-semibold text-neutral-900">{tcDisplay(v)}</p>}
+                  </div>
+                ))}
+              </div>
+              {viewAiCall.notes && (
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Notes</p>
+                  <p className="text-sm text-neutral-900 whitespace-pre-wrap">{viewAiCall.notes}</p>
                 </div>
-              ))}
+              )}
+              <div className="grid grid-cols-2 gap-2.5">
+                {[['Created', fmtDt(viewAiCall.createdAt)], ['Updated', fmtDt(viewAiCall.updatedAt)]].map(([k, v]) => (
+                  <div key={k} className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">{k}</p>
+                    <p className="text-xs text-neutral-700">{v}</p>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className={tcModalFooter}>
-              <button type="button" className={tcBtnGhost} onClick={() => setViewAiCall(null)}>
-                Close
-              </button>
+              <button type="button" className={tcBtnGhost} onClick={() => setViewAiCall(null)}>Close</button>
             </div>
           </div>
         </div>
@@ -2025,34 +2037,45 @@ export default function TCDashboard() {
         <div className={tcModalOverlay} onClick={() => setViewTraining(null)}>
           <div className={tcModalPanel} onClick={(e) => e.stopPropagation()}>
             <div className={tcModalHeader}>
-              <div>
-                <h2 className={tcModalTitle}>Training</h2>
-                <p className={tcModalSub}>Read-only view</p>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:'linear-gradient(135deg,#FF7A00,#FFB000)'}}>
+                  <BookOpen size={16} className="text-white" />
+                </div>
+                <div>
+                  <h2 className={tcModalTitle}>{viewTraining.title || 'Training'}</h2>
+                  <p className={tcModalSub}>{viewTraining.module || fmtDt(viewTraining.createdAt)}</p>
+                </div>
               </div>
-              <button type="button" onClick={() => setViewTraining(null)} className="p-2 rounded-xl text-slate-600 hover:bg-slate-100">
-                <X size={18} />
-              </button>
+              <button type="button" onClick={() => setViewTraining(null)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X size={16} /></button>
             </div>
             <div className={tcModalBody}>
-              {[
-                ['Title', viewTraining.title],
-                ['Module', viewTraining.module],
-                ['Status', viewTraining.status],
-                ['Scheduled at', viewTraining.scheduledAt ? fmtDt(viewTraining.scheduledAt) : '—'],
-                ['Notes', viewTraining.notes],
-                ['Created', fmtDt(viewTraining.createdAt)],
-                ['Updated', fmtDt(viewTraining.updatedAt)],
-              ].map(([k, v]) => (
-                <div key={k} className="grid grid-cols-12 gap-3">
-                  <div className="col-span-4 text-sm font-semibold text-slate-700">{k}</div>
-                  <div className="col-span-8 text-sm text-neutral-900 break-words whitespace-pre-wrap">{tcDisplay(v)}</div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Status</p>
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${pill(viewTraining.status)}`}>{tcDisplay(viewTraining.status)}</span>
                 </div>
-              ))}
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Scheduled</p>
+                  <p className="text-xs text-neutral-700">{viewTraining.scheduledAt ? fmtDt(viewTraining.scheduledAt) : '—'}</p>
+                </div>
+              </div>
+              {viewTraining.notes && (
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Notes</p>
+                  <p className="text-sm text-neutral-900 whitespace-pre-wrap">{viewTraining.notes}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2.5">
+                {[['Created', fmtDt(viewTraining.createdAt)], ['Updated', fmtDt(viewTraining.updatedAt)]].map(([k, v]) => (
+                  <div key={k} className="bg-slate-50 rounded-lg px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">{k}</p>
+                    <p className="text-xs text-neutral-700">{v}</p>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className={tcModalFooter}>
-              <button type="button" className={tcBtnGhost} onClick={() => setViewTraining(null)}>
-                Close
-              </button>
+              <button type="button" className={tcBtnGhost} onClick={() => setViewTraining(null)}>Close</button>
             </div>
           </div>
         </div>
@@ -2076,31 +2099,81 @@ export default function TCDashboard() {
             </div>
             <div className={tcModalBody}>
               <div>
-                <label className={tcLabel}>Select Server</label>
+                <label className={tcLabel}>Server Contact</label>
                 <select
                   className={tcSelect}
                   value={meetingForm.serverContactId}
                   onChange={(e) => syncServerFields(e.target.value)}
                 >
-                  <option value="">— Choose —</option>
+                  <option value="">— None —</option>
                   {contactsServers.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className={tcLabel}>Select Client</label>
+                <label className={tcLabel}>Client Contact</label>
                 <select
                   className={tcSelect}
                   value={meetingForm.clientContactId}
                   onChange={(e) => syncClientFields(e.target.value)}
                 >
-                  <option value="">— Choose —</option>
+                  <option value="">— None —</option>
                   {contactsClients.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </div>
+
+              {/* Warning: at least one contact required */}
+              {!meetingForm.clientContactId && !meetingForm.serverContactId && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-[11px] text-amber-700 font-medium">⚠️ Please select at least one Server or Client contact — otherwise no notification will be sent</p>
+                </div>
+              )}
+
+              {/* Notify section */}
+              {(meetingForm.serverContactId || meetingForm.clientContactId || meetingForm.assignBdId) && (
+                <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 space-y-2">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-blue-500">Email Notification</p>
+                  <p className="text-xs text-slate-500 mb-1">Select who should receive a meeting notification email</p>
+                  <div className="space-y-2">
+                    {meetingForm.serverContactId && (
+                      <label className="flex items-center gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={meetingForm.notifyServer ?? true}
+                          onChange={(e) => setMeetingForm(p => ({ ...p, notifyServer: e.target.checked }))}
+                          className="w-4 h-4 rounded accent-orange-500"
+                        />
+                        <span className="text-sm text-neutral-800">Notify <strong>{meetingForm.serverName}</strong> <span className="text-slate-400 text-xs">(Server)</span></span>
+                      </label>
+                    )}
+                    {meetingForm.clientContactId && (
+                      <label className="flex items-center gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={meetingForm.notifyClient ?? true}
+                          onChange={(e) => setMeetingForm(p => ({ ...p, notifyClient: e.target.checked }))}
+                          className="w-4 h-4 rounded accent-orange-500"
+                        />
+                        <span className="text-sm text-neutral-800">Notify <strong>{meetingForm.clientName}</strong> <span className="text-slate-400 text-xs">(Client)</span></span>
+                      </label>
+                    )}
+                    {meetingForm.assignBdId && (
+                      <label className="flex items-center gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={meetingForm.notifyBd ?? true}
+                          onChange={(e) => setMeetingForm(p => ({ ...p, notifyBd: e.target.checked }))}
+                          className="w-4 h-4 rounded accent-orange-500"
+                        />
+                        <span className="text-sm text-neutral-800">Notify <strong>{meetingForm.assignBdName}</strong> <span className="text-slate-400 text-xs">(BD)</span></span>
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
               <div>
                 <label className={tcLabel}>Assign BD</label>
                 <select
@@ -2123,7 +2196,7 @@ export default function TCDashboard() {
                 />
               </div>
               <div>
-                <label className={tcLabel}>Date & time *</label>
+                <label className={tcLabel}>Date & Time *</label>
                 <input
                   type="datetime-local"
                   className={tcInput}
@@ -2195,20 +2268,20 @@ export default function TCDashboard() {
                   onChange={(e) => setMeetingForm((p) => ({ ...p, noteForBd: e.target.value }))}
                 />
               </div>
-              <div className={tcModalFooter}>
-                <button type="button" className={tcBtnGhost} onClick={() => setMeetingModal({ open: false, mode: 'add', item: null })}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={meetingSaving}
-                  className={tcBtnPrimary}
-                  style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}
-                  onClick={saveMeeting}
-                >
-                  {meetingSaving ? 'Saving…' : 'Save'}
-                </button>
-              </div>
+            </div>
+            <div className={tcModalFooter}>
+              <button type="button" className={tcBtnGhost} onClick={() => setMeetingModal({ open: false, mode: 'add', item: null })}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={meetingSaving}
+                className={tcBtnPrimary}
+                style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}
+                onClick={saveMeeting}
+              >
+                {meetingSaving ? 'Saving…' : 'Save'}
+              </button>
             </div>
           </div>
         </div>

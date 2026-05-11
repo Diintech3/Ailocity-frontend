@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, UserRound, Settings, LogOut, Menu, X,
   ChevronDown, ChevronRight, CalendarDays, BookOpen,
-  Bot, TrendingUp, DollarSign, Users, Plus, Eye, Pencil, Trash2, Upload, Package,
+  Bot, TrendingUp, DollarSign, Users, Plus, Eye, Pencil, Trash2, Upload, Package, Bell,
 } from 'lucide-react'
 import { api, TOKEN_BD } from '../../lib/api'
 
@@ -19,6 +19,7 @@ const MAIN_TABS = [
 ]
 
 const BOTTOM_TABS = [
+  { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
 
@@ -63,6 +64,7 @@ export default function BDDashboard() {
   const [userSettingOpen, setUserSettingOpen] = useState(null)
   const [businessTab, setBusinessTab] = useState('all')
   const [businessRows, setBusinessRows] = useState([])
+  const [bdMeetings, setBdMeetings] = useState([])
 
   useEffect(() => {
     const h = (e) => {
@@ -74,16 +76,18 @@ export default function BDDashboard() {
   }, [])
 
   const load = useCallback(async () => {
-    const [meRes, dashRes, usersRes, bizRes] = await Promise.all([
+    const [meRes, dashRes, usersRes, bizRes, meetingsRes] = await Promise.all([
       api('/api/bd/me', { token }),
       api('/api/bd/dashboard', { token }),
       api('/api/bd/users', { token }),
       api('/api/bd/business', { token }),
+      api('/api/bd/meetings', { token }),
     ])
     setMe(meRes)
     setDash(dashRes)
     setBdUsers(usersRes.users || [])
     setBusinessRows(bizRes.businesses || [])
+    setBdMeetings(meetingsRes.meetings || [])
   }, [token])
 
   const refreshUsers = useCallback(async () => {
@@ -522,6 +526,76 @@ export default function BDDashboard() {
                   </div>
                 ) : null)}
               </div>
+            </div>
+          )}
+
+          {/* Notifications */}
+          {!loading && active === 'notifications' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Notifications</h2>
+                  <p className="text-slate-500 text-sm mt-1">Meetings assigned to you</p>
+                </div>
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full px-4 py-1.5">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="text-emerald-700 text-xs font-semibold">Email alerts enabled</span>
+                </div>
+              </div>
+              {bdMeetings.length === 0 ? (
+                <div className="bg-white border border-slate-200 rounded-xl p-10 shadow-sm flex flex-col items-center justify-center text-center gap-3">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
+                    <Bell size={28} className="text-white" />
+                  </div>
+                  <p className="text-slate-800 font-semibold">No meetings assigned yet</p>
+                  <p className="text-slate-500 text-sm max-w-sm">You will receive an email notification whenever a meeting is assigned to you.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {bdMeetings.map((m) => {
+                    const statusColor = m.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : m.status === 'cancelled' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700'
+                    const outcomeColor = m.outcome === 'positive' ? 'bg-emerald-100 text-emerald-700' : m.outcome === 'negative' ? 'bg-red-100 text-red-700' : m.outcome === 'neutral' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                    return (
+                      <div key={m.id} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                        <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg,#FF7A00,#FFB000)' }} />
+                        <div className="px-5 py-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-slate-900 text-sm leading-snug">{m.agenda}</p>
+                              <p className="text-xs text-slate-500 mt-1">
+                                {m.scheduledAt ? new Date(m.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${statusColor}`}>{m.status}</span>
+                              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${outcomeColor}`}>{m.outcome}</span>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {[
+                              ['Server', m.serverName],
+                              ['Client', m.clientName],
+                              ['Contact Person', m.contactPerson],
+                              ['Contact No.', m.contactNumber],
+                            ].map(([label, value]) => (
+                              <div key={label}>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</p>
+                                <p className="text-xs font-semibold text-slate-800 mt-0.5">{value || '—'}</p>
+                              </div>
+                            ))}
+                          </div>
+                          {m.noteForBd && (
+                            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500">Note for you</p>
+                              <p className="text-xs text-slate-700 mt-0.5">{m.noteForBd}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
 
