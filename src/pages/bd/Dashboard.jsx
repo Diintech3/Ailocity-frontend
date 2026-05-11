@@ -10,7 +10,7 @@ import { api, TOKEN_BD } from '../../lib/api'
 const MAIN_TABS = [
   { id: 'overview',  label: 'Overview',  icon: LayoutDashboard },
   { id: 'business',  label: 'Business',  icon: Package },
-  { id: 'users',     label: 'Users',     icon: Users },
+  { id: 'users',     label: 'BD Users',  icon: Users },
   { id: 'meetings',  label: 'Meetings',  icon: CalendarDays },
   { id: 'trainings', label: 'Trainings', icon: BookOpen },
   { id: 'ai-agent',  label: 'AI Agent',  icon: Bot },
@@ -85,14 +85,14 @@ export default function BDDashboard() {
     ])
     setMe(meRes)
     setDash(dashRes)
-    setBdUsers(usersRes.users || [])
+    setBdUsers(usersRes.bdUsers || [])
     setBusinessRows(bizRes.businesses || [])
     setBdMeetings(meetingsRes.meetings || [])
   }, [token])
 
   const refreshUsers = useCallback(async () => {
     const usersRes = await api('/api/bd/users', { token })
-    setBdUsers(usersRes.users || [])
+    setBdUsers(usersRes.bdUsers || [])
   }, [token])
 
   useEffect(() => {
@@ -400,13 +400,13 @@ export default function BDDashboard() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-900">Users</h2>
-                  <p className="text-sm text-slate-500 mt-0.5">{bdUsers.length} total users</p>
+                  <h2 className="text-xl font-semibold text-slate-900">BD Users</h2>
+                  <p className="text-sm text-slate-500 mt-0.5">{bdUsers.length} total BD users</p>
                 </div>
                 <button type="button" onClick={() => { setUserForm(BLANK_USER); setUserModal({ open: true, mode: 'add', item: null }) }}
                   className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm"
                   style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
-                  <Plus size={16} /> Add User
+                  <Plus size={16} /> Add BD User
                 </button>
               </div>
 
@@ -440,7 +440,7 @@ export default function BDDashboard() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {bdUsers.length === 0 ? (
-                        <tr><td colSpan={8} className="px-6 py-12 text-center text-sm text-slate-400">No users yet. Click "Add User" to get started.</td></tr>
+                        <tr><td colSpan={8} className="px-6 py-12 text-center text-sm text-slate-400">No BD users yet. Click "Add BD User" to get started.</td></tr>
                       ) : (userTab === 'all' ? [...bdUsers].reverse() : [...bdUsers].reverse().filter(u => u.accountType === userTab)).map((u, idx) => (
                         <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
                           <td className="px-4 py-3 text-sm text-slate-400">{idx + 1}</td>
@@ -630,7 +630,7 @@ export default function BDDashboard() {
           <div className="relative w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 sticky top-0 bg-white rounded-t-xl z-10">
               <div>
-                <h2 className="text-base font-semibold text-slate-900">{userModal.mode === 'add' ? 'Add User' : 'Edit User'}</h2>
+                <h2 className="text-base font-semibold text-slate-900">{userModal.mode === 'add' ? 'Add BD User' : 'Edit BD User'}</h2>
                 <p className="text-xs text-slate-500 mt-0.5">Fill in the user details</p>
               </div>
               <button type="button" onClick={() => setUserModal({ open: false, mode: 'add', item: null })} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
@@ -751,7 +751,7 @@ export default function BDDashboard() {
                       setUserSaving(false)
                     }
                   }} className="rounded-lg px-5 py-1.5 text-sm font-medium text-white disabled:opacity-60" style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
-                    {userSaving ? 'Saving...' : userModal.mode === 'add' ? 'Add User' : 'Save Changes'}
+                    {userSaving ? 'Saving...' : userModal.mode === 'add' ? 'Add BD User' : 'Save Changes'}
                   </button>
                 </div>
               </div>

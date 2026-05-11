@@ -2124,6 +2124,19 @@ export default function TCDashboard() {
                   ))}
                 </select>
               </div>
+              <div>
+                <label className={tcLabel}>Assign BD User</label>
+                <select
+                  className={tcSelect}
+                  value={meetingForm.assignBdId}
+                  onChange={(e) => syncBdFields(e.target.value)}
+                >
+                  <option value="">— Choose BD User —</option>
+                  {bdAssignees.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
 
               {/* Warning: at least one contact required */}
               {!meetingForm.clientContactId && !meetingForm.serverContactId && (
@@ -2174,19 +2187,6 @@ export default function TCDashboard() {
                   </div>
                 </div>
               )}
-              <div>
-                <label className={tcLabel}>Assign BD</label>
-                <select
-                  className={tcSelect}
-                  value={meetingForm.assignBdId}
-                  onChange={(e) => syncBdFields(e.target.value)}
-                >
-                  <option value="">— Choose —</option>
-                  {bdAssignees.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name || b.email}</option>
-                  ))}
-                </select>
-              </div>
               <div>
                 <label className={tcLabel}>Agenda *</label>
                 <textarea
@@ -2396,7 +2396,12 @@ export default function TCDashboard() {
               </div>
               <div>
                 <label className={tcLabel}>Disposition</label>
-                <input className={tcInput} value={dialCallForm.disposition} onChange={(e) => setDialCallForm((p) => ({ ...p, disposition: e.target.value }))} />
+                <select className={tcSelect} value={dialCallForm.disposition} onChange={(e) => setDialCallForm((p) => ({ ...p, disposition: e.target.value }))}>
+                  <option value="">— Select —</option>
+                  {['Connected', 'Not Connected', 'Busy', 'Call Back', 'Not Interested', 'Interested', 'Follow Up', 'Voicemail', 'Wrong Number'].map(o => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className={tcLabel}>Notes</label>

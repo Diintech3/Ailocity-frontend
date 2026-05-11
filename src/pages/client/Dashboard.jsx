@@ -128,7 +128,7 @@ function getActiveLabel(activeId) {
   return activeId
 }
 
-// Client Dashboard - App ke sub-clients ka dashboard
+// Client Dashboard — Sub-client dashboard
 export default function ClientDashboard() {
   const token = localStorage.getItem(TOKEN_SUBCLIENT)
   const navigate = useNavigate()

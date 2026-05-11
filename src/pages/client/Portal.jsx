@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { api, TOKEN_CLIENT, TOKEN_SUBCLIENT, TOKEN_BD, TOKEN_TC } from '../../lib/api'
 
-// Presigned URL se logo dikhata hai — R2 storage ke liye
+// Loads logo from R2 presigned URL
 function ContactLogo({ logoKey, token, size = 'md' }) {
   const [url, setUrl] = useState(null)
   const sz = size === 'lg' ? 'w-12 h-12' : size === 'xl' ? 'w-16 h-16' : 'w-8 h-8'
@@ -228,7 +228,7 @@ function blankFromFields(fields) {
   return fields.reduce((acc, f) => ({ ...acc, [f.key]: '' }), {})
 }
 
-// App Portal - App owner ka portal (Ailocity Business, Ailocity)
+// App Portal — Business owner portal (Ailocity Business, Ailocity)
 export default function ClientPortal() {
   const token = localStorage.getItem(TOKEN_CLIENT)
   const navigate = useNavigate()
@@ -267,6 +267,7 @@ export default function ClientPortal() {
   const [contactSettingOpen, setContactSettingOpen] = useState(null)
   const [contactViewItem, setContactViewItem] = useState(null)
   const [contactTab, setContactTab] = useState('all')
+  const [contactSubTab, setContactSubTab] = useState('all')
   const [contactSearch, setContactSearch] = useState('')
   const [contactPage, setContactPage] = useState(1)
   const CONTACTS_PER_PAGE = 20
@@ -275,6 +276,8 @@ export default function ClientPortal() {
   const [contactCategoryFilter, setContactCategoryFilter] = useState('all')
   const [contactTerritoryFilter, setContactTerritoryFilter] = useState('all')
   const [contactStep, setContactStep] = useState(1)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
   const [territoryData, setTerritoryData] = useState({ states: [] })
   const [selectedState, setSelectedState] = useState('')
   const [selectedCity, setSelectedCity] = useState('')
@@ -441,10 +444,33 @@ export default function ClientPortal() {
     navigate('/client/login')
   }
 
+  const aiAutoFill = async () => {
+    const prompt = aiPrompt.trim() || contactForm.name?.trim() || contactForm.company?.trim() || contactForm.websiteUrl?.trim()
+    if (!prompt) { setError('Please type a business description in the AI prompt box first'); return }
+    setAiLoading(true)
+    try {
+      const res = await api('/api/business/ai-fill', { token, method: 'POST', body: { prompt } })
+      if (res.data) {
+        setContactForm(p => {
+          const next = { ...p }
+          for (const [k, v] of Object.entries(res.data)) {
+            if (v && String(v).trim() && !next[k]?.trim()) next[k] = String(v).trim()
+          }
+          return next
+        })
+      }
+    } catch (err) {
+      setError(err.message || 'AI auto-fill failed')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
   const openContactAdd = () => {
     setContactForm(BLANK_CONTACT)
     setContactLogoUploading(false)
     setContactStep(1)
+    setAiPrompt('')
     setSelectedState('')
     setSelectedCity('')
     setSelectedRegion('')
@@ -1067,14 +1093,20 @@ export default function ClientPortal() {
             const tabFiltered = contactTab === 'all' ? rows
               : contactTab === 'new' ? rows.filter(r => r.status === 'new')
               : rows.filter(r => (r.type || '').toLowerCase() === contactTab)
+            const subTabs = contactTab === 'server' || contactTab === 'client'
+              ? ['Startup - Inhouse', 'Startup - Outside', 'MSME', 'Big Enterprise', 'PSU', 'Others']
+              : []
+            const subFiltered = contactSubTab === 'all' || subTabs.length === 0
+              ? tabFiltered
+              : tabFiltered.filter(r => (r.mbcSubCategory || '') === contactSubTab)
             const filteredRows = contactSearch.trim()
-              ? tabFiltered.filter(r =>
+              ? subFiltered.filter(r =>
                   (r.name || '').toLowerCase().includes(contactSearch.toLowerCase()) ||
                   (r.company || '').toLowerCase().includes(contactSearch.toLowerCase()) ||
                   (r.email || '').toLowerCase().includes(contactSearch.toLowerCase()) ||
                   (r.mobile || '').includes(contactSearch)
                 )
-              : tabFiltered
+              : subFiltered
             const totalPages = Math.ceil(filteredRows.length / CONTACTS_PER_PAGE)
             const pagedRows = filteredRows.slice((contactPage - 1) * CONTACTS_PER_PAGE, contactPage * CONTACTS_PER_PAGE)
             return (
@@ -1089,13 +1121,12 @@ export default function ClientPortal() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
-                    { label: 'Total',            value: rows.length,                                                                                    color: 'text-slate-900' },
-                    { label: 'Clients',          value: rows.filter(r => String(r.type||'').toLowerCase() === 'client').length,                         color: 'text-orange-600' },
-                    { label: 'Server',           value: rows.filter(r => String(r.type||'').toLowerCase() === 'server').length,                         color: 'text-violet-700' },
-                    { label: 'Server & Client',  value: rows.filter(r => String(r.type||'').toLowerCase() === 'server & client').length,                color: 'text-cyan-700' },
-                    { label: 'Active',           value: rows.filter(r => String(r.status||'').toLowerCase() === 'active').length,                       color: 'text-emerald-700' },
+                    { label: 'Total',   value: rows.length,                                                                     color: 'text-slate-900' },
+                    { label: 'Clients', value: rows.filter(r => String(r.type||'').toLowerCase() === 'client').length,          color: 'text-orange-600' },
+                    { label: 'Server',  value: rows.filter(r => String(r.type||'').toLowerCase() === 'server').length,          color: 'text-violet-700' },
+                    { label: 'Active',  value: rows.filter(r => String(r.status||'').toLowerCase() === 'active').length,        color: 'text-emerald-700' },
                   ].map(s => (
                     <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                       <p className="text-xs text-slate-500">{s.label}</p>
@@ -1106,40 +1137,53 @@ export default function ClientPortal() {
 
                 <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                   {/* Filter Tabs */}
-                  <div className="flex items-center justify-between px-4 pt-3 pb-0 border-b border-slate-200">
-                    <div className="flex gap-1 overflow-x-auto flex-shrink-0">
-                      {[
-                        { key: 'all',             label: 'All',            count: rows.length },
-                        { key: 'client',          label: 'Client',         count: rows.filter(r => (r.type||'').toLowerCase() === 'client').length },
-                        { key: 'server',          label: 'Server',         count: rows.filter(r => (r.type||'').toLowerCase() === 'server').length },
-                        { key: 'server & client', label: 'S & C',          count: rows.filter(r => (r.type||'').toLowerCase() === 'server & client').length },
-                      ].map(tab => (
-                        <button
-                          key={tab.key}
-                          type="button"
-                          onClick={() => { setContactTab(tab.key); setContactPage(1) }}
-                          className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
-                            contactTab === tab.key
-                              ? 'border-orange-500 text-orange-500'
-                              : 'border-transparent text-slate-500 hover:text-slate-800'
-                          }`}
-                        >
-                          {tab.label} <span className="ml-0.5 text-slate-400">({tab.count})</span>
+                  <div className="border-b border-slate-200">
+                    <div className="flex items-center justify-between px-4 pt-3 pb-0">
+                      <div className="flex gap-1 overflow-x-auto flex-shrink-0">
+                        {[
+                          { key: 'all',    label: 'All',    count: rows.length },
+                          { key: 'client', label: 'Client', count: rows.filter(r => (r.type||'').toLowerCase() === 'client').length },
+                          { key: 'server', label: 'Server', count: rows.filter(r => (r.type||'').toLowerCase() === 'server').length },
+                        ].map(tab => (
+                          <button key={tab.key} type="button"
+                            onClick={() => { setContactTab(tab.key); setContactSubTab('all'); setContactPage(1) }}
+                            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+                              contactTab === tab.key ? 'border-orange-500 text-orange-500' : 'border-transparent text-slate-500 hover:text-slate-800'
+                            }`}>
+                            {tab.label} <span className="ml-0.5 text-slate-400">({tab.count})</span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="relative mb-1 flex-shrink-0">
+                        <input type="text" placeholder="Search…" value={contactSearch}
+                          onChange={e => { setContactSearch(e.target.value); setContactPage(1) }}
+                          className="border border-slate-200 rounded-lg pl-3 pr-7 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 w-40" />
+                        {contactSearch && (
+                          <button type="button" onClick={() => setContactSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">✕</button>
+                        )}
+                      </div>
+                    </div>
+                    {/* Sub-tabs for Client and Server */}
+                    {subTabs.length > 0 && (
+                      <div className="flex gap-1 px-4 pb-0 pt-1 overflow-x-auto">
+                        <button type="button"
+                          onClick={() => { setContactSubTab('all'); setContactPage(1) }}
+                          className={`px-2.5 py-1.5 text-[11px] font-medium rounded-t border-b-2 transition-colors whitespace-nowrap ${
+                            contactSubTab === 'all' ? 'border-violet-500 text-violet-600' : 'border-transparent text-slate-400 hover:text-slate-700'
+                          }`}>
+                          All <span className="ml-0.5 opacity-60">({tabFiltered.length})</span>
                         </button>
-                      ))}
-                    </div>
-                    <div className="relative mb-1 flex-shrink-0">
-                      <input
-                        type="text"
-                        placeholder="Search…"
-                        value={contactSearch}
-                        onChange={e => { setContactSearch(e.target.value); setContactPage(1) }}
-                        className="border border-slate-200 rounded-lg pl-3 pr-7 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500 w-40"
-                      />
-                      {contactSearch && (
-                        <button type="button" onClick={() => setContactSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">✕</button>
-                      )}
-                    </div>
+                        {subTabs.map(s => (
+                          <button key={s} type="button"
+                            onClick={() => { setContactSubTab(s); setContactPage(1) }}
+                            className={`px-2.5 py-1.5 text-[11px] font-medium rounded-t border-b-2 transition-colors whitespace-nowrap ${
+                              contactSubTab === s ? 'border-violet-500 text-violet-600' : 'border-transparent text-slate-400 hover:text-slate-700'
+                            }`}>
+                            {s} <span className="ml-0.5 opacity-60">({tabFiltered.filter(r => (r.mbcSubCategory||'') === s).length})</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <table className="w-full table-fixed">
@@ -1924,9 +1968,36 @@ export default function ClientPortal() {
                 </div>
               )}
 
+              {/* AI Auto-Fill */}
+              <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-violet-700">✨ AI Auto-Fill</p>
+                  <button
+                    type="button"
+                    onClick={aiAutoFill}
+                    disabled={aiLoading}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:from-violet-600 hover:to-purple-700 disabled:opacity-60 shadow-sm"
+                  >
+                    {aiLoading
+                      ? <><span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Analyzing…</>
+                      : '✨ Fill Form'}
+                  </button>
+                </div>
+                <textarea
+                  value={aiPrompt}
+                  onChange={e => setAiPrompt(e.target.value)}
+                  placeholder="Describe the business in natural language… e.g. Ramesh ki IT company hai Delhi mein, web development aur app development karte hain, Pvt Ltd hai"
+                  rows={2}
+                  className="w-full border border-violet-200 rounded-lg px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/25 focus:border-violet-500 resize-none placeholder-slate-400"
+                />
+                <p className="text-xs text-violet-600">AI will only fill empty fields — already filled fields will remain unchanged.</p>
+              </div>
+
               {/* Business Information */}
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2.5">Business Information</p>
+                <div className="flex items-center justify-between mb-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Business Information</p>
+                </div>
                 <div className="grid grid-cols-3 gap-2.5">
                   <div>
                     <label className="block text-xs text-slate-600 mb-1">Name <span className="text-red-500">*</span></label>
@@ -2060,11 +2131,10 @@ export default function ClientPortal() {
                 <div className="grid grid-cols-3 gap-2.5">
                   <div>
                     <label className="block text-xs text-slate-600 mb-1">Major Business Category (MBC)</label>
-                    <select value={String(contactForm.type || '').toLowerCase()} onChange={e => setContactForm(p => ({ ...p, type: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
+                    <select value={String(contactForm.type || '').toLowerCase()} onChange={e => setContactForm(p => ({ ...p, type: e.target.value, mbcSubCategory: '' }))} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
                       {[
-                        { v: 'client',          label: 'Client' },
-                        { v: 'server',          label: 'Server' },
-                        { v: 'server & client', label: 'Server & Client' },
+                        { v: 'client', label: 'Client' },
+                        { v: 'server', label: 'Server' },
                       ].map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
                     </select>
                   </div>
@@ -2072,7 +2142,7 @@ export default function ClientPortal() {
                     <label className="block text-xs text-slate-600 mb-1">MBC Sub Category</label>
                     <select value={contactForm.mbcSubCategory || ''} onChange={e => setContactForm(p => ({ ...p, mbcSubCategory: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500">
                       <option value="">Select sub category</option>
-                      {['Startup - Inhouse','Startup - Outside','MSME','Big Enterprise','PSU','Others'].map(o => <option key={o} value={o}>{o}</option>)}
+                      {['Startup - Inhouse', 'Startup - Outside', 'MSME', 'Big Enterprise', 'PSU', 'Others'].map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </div>
                   <div>
