@@ -144,6 +144,20 @@ export default function ClientDashboard() {
   const [settingsTab, setSettingsTab] = useState('vectorise')
   const [profileTab, setProfileTab] = useState('profile')
   const [clientMeetings, setClientMeetings] = useState([])
+  const [clientNotifications, setClientNotifications] = useState([])
+
+  useEffect(() => {
+    if (!token) return
+    api('/api/business/notifications', { token })
+      .then((r) => setClientNotifications(r.notifications || []))
+      .catch(() => {})
+  }, [token, active])
+
+  const clientMarkAllRead = async () => {
+    await api('/api/business/notifications/read-all', { token, method: 'PATCH' })
+    setClientNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+  }
+  const clientUnreadCount = clientNotifications.filter((n) => !n.read).length
   const [dsModal, setDsModal] = useState(false)
   const [dsForm, setDsForm] = useState({ type: '', title: '', description: '', websiteUrl: '', fileKey: '', fileName: '', uploading: false })
   const [dsSaving, setDsSaving] = useState(false)
@@ -1366,28 +1380,58 @@ export default function ClientDashboard() {
 
           {/* Notifications */}
           {!loading && active === 'notifications' && (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-semibold text-slate-900">Notifications</h2>
-                  <p className="text-slate-500 text-sm mt-1">Meetings scheduled for you</p>
                 </div>
                 <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full px-4 py-1.5">
                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
                   <span className="text-emerald-700 text-xs font-semibold">Email alerts enabled</span>
                 </div>
               </div>
-              {clientMeetings.length === 0 ? (
-                <div className="bg-white border border-slate-200 rounded-xl p-10 shadow-sm flex flex-col items-center justify-center text-center gap-3">
-                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
-                    <Bell size={28} className="text-white" />
-                  </div>
-                  <p className="text-slate-800 font-semibold">No meetings scheduled yet</p>
-                  <p className="text-slate-500 text-sm max-w-sm">You will receive an email notification whenever a meeting is scheduled for you.</p>
+
+              {/* TC Alerts Section */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">📢 TC Alerts</h3>
+                  {clientUnreadCount > 0 && (
+                    <button type="button" onClick={clientMarkAllRead}
+                      className="text-xs font-medium text-orange-600 hover:text-orange-800 border border-orange-200 rounded-lg px-3 py-1">
+                      Mark all as read
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {clientMeetings.map((m) => {
+                {clientNotifications.length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-xl px-5 py-6 text-center">
+                    <p className="text-sm text-slate-400">No TC alerts yet.</p>
+                  </div>
+                ) : (
+                  clientNotifications.map((n) => (
+                    <div key={n.id} className={`bg-white border rounded-xl px-4 py-3 shadow-sm flex items-start gap-3 ${
+                      n.read ? 'border-slate-200' : 'border-orange-300 bg-orange-50/40'
+                    }`}>
+                      <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${n.read ? 'bg-slate-300' : 'bg-orange-500'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-800 whitespace-pre-wrap">{n.message}</p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {n.sentBy} • {n.sentAt ? new Date(n.sentAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Meetings Section */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">🤝 Meetings Scheduled for You</h3>
+                {clientMeetings.length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-xl px-5 py-6 text-center">
+                    <p className="text-sm text-slate-400">No meetings scheduled yet.</p>
+                  </div>
+                ) : (
+                  clientMeetings.map((m) => {
                     const statusColor = m.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : m.status === 'cancelled' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700'
                     const outcomeColor = m.outcome === 'positive' ? 'bg-emerald-100 text-emerald-700' : m.outcome === 'negative' ? 'bg-red-100 text-red-700' : m.outcome === 'neutral' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
                     return (
@@ -1396,10 +1440,8 @@ export default function ClientDashboard() {
                         <div className="px-5 py-4">
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-slate-900 text-sm leading-snug">{m.agenda}</p>
-                              <p className="text-xs text-slate-500 mt-1">
-                                {m.scheduledAt ? new Date(m.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
-                              </p>
+                              <p className="font-semibold text-slate-900 text-sm">{m.agenda}</p>
+                              <p className="text-xs text-slate-500 mt-1">{m.scheduledAt ? new Date(m.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</p>
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
                               <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${statusColor}`}>{m.status}</span>
@@ -1407,12 +1449,7 @@ export default function ClientDashboard() {
                             </div>
                           </div>
                           <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            {[
-                              ['Server', m.serverName],
-                              ['BD Assigned', m.assignBdName],
-                              ['Contact Person', m.contactPerson],
-                              ['Contact No.', m.contactNumber],
-                            ].map(([label, value]) => (
+                            {[['Server', m.serverName], ['BD Assigned', m.assignBdName], ['Contact Person', m.contactPerson], ['Contact No.', m.contactNumber]].map(([label, value]) => (
                               <div key={label}>
                                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</p>
                                 <p className="text-xs font-semibold text-slate-800 mt-0.5">{value || '—'}</p>
@@ -1422,9 +1459,9 @@ export default function ClientDashboard() {
                         </div>
                       </div>
                     )
-                  })}
-                </div>
-              )}
+                  })
+                )}
+              </div>
             </div>
           )}
 

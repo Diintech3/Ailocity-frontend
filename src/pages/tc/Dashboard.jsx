@@ -4,18 +4,21 @@ import {
   LayoutDashboard, PhoneCall, Users, FileText, Settings, Package,
   LogOut, Menu, X, ChevronDown, ChevronRight, Bot, BookOpen,
   Megaphone, Ticket, CreditCard, HelpCircle, Plus, Pencil, Trash2,
-  Eye, Settings2, Search,
+  Eye, Settings2, Search, Send, Bell, UserCheck, Mail, MapPin, Briefcase, Calendar,
 } from 'lucide-react'
 import { api, TOKEN_TC, TOKEN_CLIENT } from '../../lib/api'
 
 const MAIN_TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'business', label: 'Business', icon: Package },
+  { id: 'leads', label: 'Leads', icon: Users },
   { id: 'mydail', label: 'MyDail', icon: PhoneCall },
   { id: 'meetings', label: 'Meetings', icon: FileText },
+  { id: 'team', label: 'Team', icon: UserCheck },
   { id: 'ai-agent', label: 'AI Agent', icon: Bot },
   { id: 'ai-calls', label: 'AI Calls', icon: PhoneCall },
   { id: 'trainings', label: 'Trainings', icon: BookOpen },
+  { id: 'telegram', label: 'Telegram', icon: Bell },
 ]
 
 const BOTTOM_TABS = [
@@ -140,6 +143,16 @@ function tcToken() {
   return null
 }
 
+// ── Quick update meeting inline ─────────────────────────────────────────────
+async function quickUpdateMeeting(token, id, patch, load) {
+  try {
+    await api(`/api/business/meetings/${id}`, { token, method: 'PATCH', body: patch })
+    await load()
+  } catch (e) {
+    alert(e.message || 'Update failed')
+  }
+}
+
 const BLANK_MEETING = {
   serverContactId: '',
   serverName: '',
@@ -189,7 +202,7 @@ const tcBtnPrimary =
   'rounded-lg px-4 py-1.5 text-sm font-semibold text-white shadow-sm hover:brightness-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed'
 
 const tcDropdown =
-  'absolute right-2 top-full z-[9999] mt-2 w-[11.5rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)]'
+  'fixed z-[9999] w-[11.5rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.25)]'
 const tcDropdownItem =
   'flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-base font-medium text-neutral-800 hover:bg-slate-50 active:bg-slate-100'
 const tcDropdownItemDanger =
@@ -198,6 +211,12 @@ const tcDropdownItemDanger =
 function tcDisplay(v) {
   if (v == null || v === '') return '—'
   return String(v)
+}
+
+function openMenu(e, kind, id, setMenu, setPos) {
+  const rect = e.currentTarget.getBoundingClientRect()
+  setPos({ top: rect.bottom + 4, left: rect.right - 160 })
+  setMenu(cur => cur?.kind === kind && cur?.id === id ? null : { kind, id })
 }
 
 export default function TCDashboard() {
@@ -227,8 +246,9 @@ export default function TCDashboard() {
   const [dropOpen, setDropOpen] = useState(false)
   const dropRef = useRef(null)
   const menuRef = useRef(null)
-  /** @type {[null | { kind: 'meeting' | 'report' | 'dial' | 'aicall' | 'training', id: string }, React.Dispatch<React.SetStateAction<null | { kind: 'meeting' | 'report' | 'dial' | 'aicall' | 'training', id: string }>>]} */
+  /** @type {[null | { kind: 'meeting' | 'report' | 'dial' | 'aicall' | 'training' | 'lead', id: string }, React.Dispatch<React.SetStateAction<null | { kind: 'meeting' | 'report' | 'dial' | 'aicall' | 'training' | 'lead', id: string }>>]} */
   const [tcActionMenu, setTcActionMenu] = useState(null)
+  const [tcMenuPos, setTcMenuPos] = useState({ top: 0, left: 0 })
   const [viewMeeting, setViewMeeting] = useState(null)
   const [viewReport, setViewReport] = useState(null)
   const [viewDialCall, setViewDialCall] = useState(null)
@@ -247,13 +267,64 @@ export default function TCDashboard() {
   const [aiCallForm, setAiCallForm] = useState(BLANK_AI_CALL)
   const [savingMisc, setSavingMisc] = useState(false)
 
+  // ── Team state ──────────────────────────────────────────────────────────────
+  const TEAM_ROLES = ['TC', 'BD', 'Support', 'Manager', 'Trainer', 'Field Agent', 'Other']
+  const BLANK_TEAM_MEMBER = { name: '', email: '', mobile: '', role: 'TC', city: '', address: '', status: 'active', joiningDate: '', notes: '', imageUrl: '' }
+  const [teamMembers, setTeamMembers] = useState([
+    { id: '1', name: 'Rahul Sharma', email: 'rahul@ailocity.com', mobile: '9876543210', role: 'TC', city: 'Mumbai', address: 'Andheri West, Mumbai', status: 'active', joiningDate: '2024-01-15', notes: 'Senior TC, handles west zone', imageUrl: '' },
+    { id: '2', name: 'Priya Verma', email: 'priya@ailocity.com', mobile: '9812345678', role: 'BD', city: 'Delhi', address: 'Connaught Place, Delhi', status: 'active', joiningDate: '2024-02-10', notes: 'BD partner, north region', imageUrl: '' },
+    { id: '3', name: 'Amit Patel', email: 'amit@ailocity.com', mobile: '9988776655', role: 'Support', city: 'Ahmedabad', address: 'SG Highway, Ahmedabad', status: 'active', joiningDate: '2024-03-05', notes: '', imageUrl: '' },
+    { id: '4', name: 'Sneha Joshi', email: 'sneha@ailocity.com', mobile: '9765432109', role: 'Trainer', city: 'Pune', address: 'Hinjewadi, Pune', status: 'inactive', joiningDate: '2023-11-20', notes: 'On leave', imageUrl: '' },
+    { id: '5', name: 'Vikram Singh', email: 'vikram@ailocity.com', mobile: '9654321098', role: 'Field Agent', city: 'Jaipur', address: 'Malviya Nagar, Jaipur', status: 'active', joiningDate: '2024-04-01', notes: 'Rajasthan zone', imageUrl: '' },
+  ])
+  const [teamModal, setTeamModal] = useState({ open: false, mode: 'add', item: null })
+  const [teamForm, setTeamForm] = useState(BLANK_TEAM_MEMBER)
+  const [teamViewItem, setTeamViewItem] = useState(null)
+  const [teamTabFilter, setTeamTabFilter] = useState('all')
+  const [teamSearch, setTeamSearch] = useState('')
+  const [teamImgUploading, setTeamImgUploading] = useState(false)
+
+  // ── Lead management state ───────────────────────────────────────────────────
+  const BLANK_LEAD = { name: '', email: '', mobile: '', source: 'Direct', requirement: '', budget: '', status: 'new', priority: 'medium', assignedTo: '', assignedName: '', followUpDate: '', notes: '' }
+  const [leadModal, setLeadModal] = useState({ open: false, item: null })
+  const [leadForm, setLeadForm] = useState(BLANK_LEAD)
+  const [leadViewItem, setLeadViewItem] = useState(null)
+  const [leadStatusFilter, setLeadStatusFilter] = useState('all')
+  const [leadPriorityFilter, setLeadPriorityFilter] = useState('all')
+  const [leadSearchQ, setLeadSearchQ] = useState('')
+
+  // ── Telegram state ──────────────────────────────────────────────────────────
+  const [tgBotToken, setTgBotToken] = useState('')
+  const [tgChatId, setTgChatId] = useState('')
+  const [tgSettingsSaving, setTgSettingsSaving] = useState(false)
+  const [tgSettingsSaved, setTgSettingsSaved] = useState(false)
+  const [tgMessage, setTgMessage] = useState('')
+  const [tgSending, setTgSending] = useState(false)
+  const [tgSendResult, setTgSendResult] = useState(null) // { ok: bool, msg: string }
+  const [tgActiveSection, setTgActiveSection] = useState('send') // 'send' | 'settings'
+
   useEffect(() => {
     const h = (e) => {
       if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false)
+      if (!e.target.closest('[data-menu]')) setTcActionMenu(null)
     }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [])
+
+  // Load telegram settings on mount and when tab opens
+  useEffect(() => {
+    if (!token) return
+    api('/api/business/telegram/settings', { token })
+      .then((r) => {
+        setTgBotToken(r.botToken || import.meta.env.VITE_TELEGRAM_BOT_TOKEN || '')
+        setTgChatId(r.chatId || import.meta.env.VITE_TELEGRAM_CHAT_ID || '')
+      })
+      .catch(() => {
+        setTgBotToken(import.meta.env.VITE_TELEGRAM_BOT_TOKEN || '')
+        setTgChatId(import.meta.env.VITE_TELEGRAM_CHAT_ID || '')
+      })
+  }, [token])
 
   const load = useCallback(async () => {
     const [
@@ -879,6 +950,263 @@ export default function TCDashboard() {
             )
           })()}
 
+          {!loading && active === 'leads' && (() => {
+            const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'lost']
+            const LEAD_PRIORITIES = ['high', 'medium', 'low']
+            const LEAD_SOURCES = ['Direct', 'Referral', 'Website', 'Social Media', 'Cold Call', 'Email', 'Walk-in', 'Other']
+
+            const filtered = leads.filter((l) => {
+              const q = leadSearchQ.toLowerCase()
+              const matchQ = !q || (l.name||'').toLowerCase().includes(q) || (l.mobile||'').includes(q) || (l.email||'').toLowerCase().includes(q) || (l.requirement||'').toLowerCase().includes(q)
+              const matchStatus = leadStatusFilter === 'all' || l.status === leadStatusFilter
+              const matchPriority = leadPriorityFilter === 'all' || l.priority === leadPriorityFilter
+              return matchQ && matchStatus && matchPriority
+            })
+
+            const counts = LEAD_STATUSES.reduce((acc, s) => ({ ...acc, [s]: leads.filter(l => l.status === s).length }), {})
+
+            const saveLead = async () => {
+              if (!leadForm.name.trim()) return alert('Name is required')
+              setSavingMisc(true)
+              try {
+                if (leadModal.item) {
+                  await api(`/api/business/leads/${leadModal.item.id}`, { token, method: 'PATCH', body: leadForm })
+                } else {
+                  await api('/api/business/leads', { token, method: 'POST', body: leadForm })
+                }
+                await load()
+                setLeadModal({ open: false, item: null })
+              } catch (e) { alert(e.message || 'Save failed') }
+              finally { setSavingMisc(false) }
+            }
+
+            return (
+              <div className="space-y-4">
+                {/* Header */}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-semibold text-neutral-950">Lead Management</h2>
+                    <p className="text-sm text-neutral-500 mt-0.5">{leads.length} total leads</p>
+                  </div>
+                  <button type="button"
+                    onClick={() => { setLeadForm({ name: '', email: '', mobile: '', source: 'Direct', requirement: '', budget: '', status: 'new', priority: 'medium', assignedTo: '', assignedName: '', followUpDate: '', notes: '' }); setLeadModal({ open: true, item: null }) }}
+                    className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm"
+                    style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
+                    <Plus size={16} /> Add Lead
+                  </button>
+                </div>
+
+                {/* Stats row */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[{ label: 'New', key: 'new', color: 'text-blue-600 bg-blue-50 border-blue-100' },
+                    { label: 'Contacted', key: 'contacted', color: 'text-amber-600 bg-amber-50 border-amber-100' },
+                    { label: 'Qualified', key: 'qualified', color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
+                    { label: 'Lost', key: 'lost', color: 'text-red-600 bg-red-50 border-red-100' },
+                  ].map(s => (
+                    <button key={s.key} type="button"
+                      onClick={() => setLeadStatusFilter(leadStatusFilter === s.key ? 'all' : s.key)}
+                      className={`rounded-xl border p-3 text-left transition-all ${s.color} ${leadStatusFilter === s.key ? 'ring-2 ring-offset-1 ring-orange-400' : ''}`}>
+                      <p className="text-xs font-semibold uppercase tracking-wide opacity-70">{s.label}</p>
+                      <p className="text-2xl font-black mt-0.5">{counts[s.key] || 0}</p>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Filters */}
+                <div className="flex flex-wrap gap-2 items-center bg-white border border-slate-200 rounded-xl px-4 py-2.5 shadow-sm">
+                  <div className="relative flex-1 min-w-[160px]">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input type="text" placeholder="Search name, mobile, email…" value={leadSearchQ}
+                      onChange={e => setLeadSearchQ(e.target.value)}
+                      className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:border-orange-400" />
+                  </div>
+                  <select value={leadPriorityFilter} onChange={e => setLeadPriorityFilter(e.target.value)}
+                    className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-orange-400">
+                    <option value="all">All Priority</option>
+                    <option value="high">🔴 High</option>
+                    <option value="medium">🟡 Medium</option>
+                    <option value="low">🟢 Low</option>
+                  </select>
+                  {(leadStatusFilter !== 'all' || leadPriorityFilter !== 'all' || leadSearchQ) && (
+                    <button type="button" onClick={() => { setLeadStatusFilter('all'); setLeadPriorityFilter('all'); setLeadSearchQ('') }}
+                      className="text-xs font-medium text-orange-600 hover:text-orange-800 border border-orange-200 rounded-lg px-3 py-1.5">
+                      Clear filters
+                    </button>
+                  )}
+                  <p className="text-xs text-slate-400 ml-auto">{filtered.length} results</p>
+                </div>
+
+                {/* Table */}
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[750px] border-collapse">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600 w-8">#</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600">Name</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600 w-28">Mobile</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600 w-24">Source</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600">Requirement</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600 w-28">Assigned To</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600 w-24">BD Notes</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600 w-20">Priority</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600 w-24">Status</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600 w-24">Follow Up</th>
+                          <th className="px-3 py-2.5 text-center text-[10px] font-bold uppercase tracking-wide text-slate-600 w-14">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filtered.length === 0 ? (
+                          <tr><td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-400">No leads found.</td></tr>
+                        ) : [...filtered].reverse().map((l, idx) => (
+                          <tr key={l.id} className="hover:bg-orange-50/30 transition-colors align-middle">
+                            <td className="px-3 py-3 text-xs text-slate-400 tabular-nums">{idx + 1}</td>
+                            <td className="px-3 py-3">
+                              <p className="text-sm font-semibold text-neutral-900">{l.name}</p>
+                              {l.email && <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[160px]">{l.email}</p>}
+                            </td>
+                            <td className="px-3 py-3 text-sm text-slate-700 tabular-nums whitespace-nowrap">{l.mobile || '—'}</td>
+                            <td className="px-3 py-3 text-xs text-slate-600 whitespace-nowrap">{l.source || '—'}</td>
+                            <td className="px-3 py-3">
+                              <p className="text-xs text-slate-700 line-clamp-1 max-w-[160px]">{l.requirement || '—'}</p>
+                              {l.budget && <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">₹{l.budget}</p>}
+                            </td>
+                            <td className="px-3 py-3">
+                              {l.assignedName
+                                ? <span className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 bg-violet-50 border border-violet-100 rounded-full px-2 py-0.5 whitespace-nowrap max-w-[100px] truncate">
+                                    <Users size={10} className="flex-shrink-0" />{l.assignedName}
+                                  </span>
+                                : <span className="text-xs text-slate-400">—</span>}
+                            </td>
+                            <td className="px-3 py-3">
+                              {l.bdNotes
+                                ? <p className="text-xs text-slate-600 line-clamp-1 max-w-[100px]" title={l.bdNotes}>{l.bdNotes}</p>
+                                : <span className="text-xs text-slate-300">—</span>}
+                            </td>
+                            <td className="px-3 py-3">
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold capitalize whitespace-nowrap ${pill(l.priority)}`}>{l.priority}</span>
+                            </td>
+                            <td className="px-3 py-3">
+                              <select value={l.status}
+                                onChange={async (e) => {
+                                  try {
+                                    await api(`/api/business/leads/${l.id}`, { token, method: 'PATCH', body: { status: e.target.value } })
+                                    await load()
+                                  } catch(err) { alert(err.message || 'Failed') }
+                                }}
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold capitalize border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-400 ${pill(l.status)}`}>
+                                {LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </td>
+                            <td className="px-3 py-3 text-[11px] text-slate-500 whitespace-nowrap">
+                              {l.followUpDate ? new Date(l.followUpDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—'}
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              <div className="relative inline-block">
+                                <button type="button"
+                                  data-menu
+                                  onClick={(e) => openMenu(e, 'lead', l.id, setTcActionMenu, setTcMenuPos)}
+                                  className="inline-flex items-center justify-center rounded-lg border border-transparent p-1.5 text-slate-500 hover:border-slate-200 hover:bg-slate-50 transition-colors">
+                                  <Settings2 size={15} strokeWidth={2} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Add/Edit Lead Modal */}
+                {leadModal.open && (
+                  <div className={tcModalOverlay} onClick={() => setLeadModal({ open: false, item: null })}>
+                    <div className="relative w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                      <div className={tcModalHeader}>
+                        <div>
+                          <h2 className={tcModalTitle}>{leadModal.item ? 'Edit Lead' : 'Add New Lead'}</h2>
+                          <p className={tcModalSub}>Fill lead details and assign to BD/TC</p>
+                        </div>
+                        <button type="button" onClick={() => setLeadModal({ open: false, item: null })} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X size={16} /></button>
+                      </div>
+                      <div className={tcModalBody}>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="col-span-2">
+                            <label className={tcLabel}>Name *</label>
+                            <input className={tcInput} value={leadForm.name} onChange={e => setLeadForm(p => ({ ...p, name: e.target.value }))} placeholder="Lead name" />
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Mobile</label>
+                            <input className={tcInput} value={leadForm.mobile} onChange={e => setLeadForm(p => ({ ...p, mobile: e.target.value }))} placeholder="Mobile number" />
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Email</label>
+                            <input className={tcInput} type="email" value={leadForm.email} onChange={e => setLeadForm(p => ({ ...p, email: e.target.value }))} placeholder="Email" />
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Source</label>
+                            <select className={tcSelect} value={leadForm.source} onChange={e => setLeadForm(p => ({ ...p, source: e.target.value }))}>
+                              {LEAD_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Budget</label>
+                            <input className={tcInput} value={leadForm.budget} onChange={e => setLeadForm(p => ({ ...p, budget: e.target.value }))} placeholder="e.g. 50000" />
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Priority</label>
+                            <select className={tcSelect} value={leadForm.priority} onChange={e => setLeadForm(p => ({ ...p, priority: e.target.value }))}>
+                              <option value="high">🔴 High</option>
+                              <option value="medium">🟡 Medium</option>
+                              <option value="low">🟢 Low</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Status</label>
+                            <select className={tcSelect} value={leadForm.status} onChange={e => setLeadForm(p => ({ ...p, status: e.target.value }))}>
+                              {LEAD_STATUSES.map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Assign To (BD/TC)</label>
+                            <select className={tcSelect} value={leadForm.assignedTo}
+                              onChange={e => {
+                                const bd = bdAssignees.find(x => x.id === e.target.value)
+                                setLeadForm(p => ({ ...p, assignedTo: e.target.value, assignedName: bd?.name || '' }))
+                              }}>
+                              <option value="">— Unassigned —</option>
+                              {bdAssignees.map(b => <option key={b.id} value={b.id}>{b.name} ({b.role})</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Follow Up Date</label>
+                            <input type="date" className={tcInput} value={leadForm.followUpDate} onChange={e => setLeadForm(p => ({ ...p, followUpDate: e.target.value }))} />
+                          </div>
+                          <div className="col-span-2">
+                            <label className={tcLabel}>Requirement</label>
+                            <textarea className={tcTextarea} rows={2} value={leadForm.requirement} onChange={e => setLeadForm(p => ({ ...p, requirement: e.target.value }))} placeholder="What does the lead need?" />
+                          </div>
+                          <div className="col-span-2">
+                            <label className={tcLabel}>Notes</label>
+                            <textarea className={tcTextarea} rows={2} value={leadForm.notes} onChange={e => setLeadForm(p => ({ ...p, notes: e.target.value }))} placeholder="Internal notes…" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className={tcModalFooter}>
+                        <button type="button" className={tcBtnGhost} onClick={() => setLeadModal({ open: false, item: null })}>Cancel</button>
+                        <button type="button" disabled={savingMisc} className={tcBtnPrimary}
+                          style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}
+                          onClick={saveLead}>
+                          {savingMisc ? 'Saving…' : leadModal.item ? 'Update Lead' : 'Add Lead'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
           {!loading && active === 'mydail' && (
             <div className="space-y-4">
               <div>
@@ -1382,15 +1710,51 @@ export default function TCDashboard() {
                         )}
                       </div>
 
-                      {/* Footer */}
-                      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-t border-slate-100">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Outcome</span>
-                          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${pill(m.outcome)}`}>
-                            {tcDisplay(m.outcome)}
-                          </span>
+                      {/* Footer — Quick Update Bar */}
+                      <div className="border-t border-slate-100 bg-slate-50 px-4 py-2.5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Outcome</span>
+                            <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${pill(m.outcome)}`}>
+                              {tcDisplay(m.outcome)}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 font-medium">{fmtDt(m.updatedAt)}</p>
                         </div>
-                        <p className="text-[11px] text-slate-400 font-medium">{fmtDt(m.updatedAt)}</p>
+                        {/* Inline quick-update controls */}
+                        <div className="flex flex-wrap gap-1.5 pt-1 border-t border-slate-200">
+                          {/* Status */}
+                          <select
+                            value={m.status}
+                            onChange={(e) => quickUpdateMeeting(token, m.id, { status: e.target.value }, load)}
+                            className="flex-1 min-w-[90px] rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-neutral-800 focus:outline-none focus:border-orange-400 cursor-pointer"
+                          >
+                            <option value="pending">⏳ Pending</option>
+                            <option value="completed">✅ Completed</option>
+                            <option value="cancelled">❌ Cancelled</option>
+                          </select>
+                          {/* Outcome */}
+                          <select
+                            value={m.outcome}
+                            onChange={(e) => quickUpdateMeeting(token, m.id, { outcome: e.target.value }, load)}
+                            className="flex-1 min-w-[90px] rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-neutral-800 focus:outline-none focus:border-orange-400 cursor-pointer"
+                          >
+                            <option value="waiting">⏸ Waiting</option>
+                            <option value="positive">👍 Positive</option>
+                            <option value="negative">👎 Negative</option>
+                            <option value="neutral">😐 Neutral</option>
+                          </select>
+                          {/* Disposition */}
+                          <select
+                            value={m.disposition}
+                            onChange={(e) => quickUpdateMeeting(token, m.id, { disposition: e.target.value }, load)}
+                            className="flex-1 min-w-[80px] rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-neutral-800 focus:outline-none focus:border-orange-400 cursor-pointer"
+                          >
+                            <option value="hot">🔥 Hot</option>
+                            <option value="warm">🌤 Warm</option>
+                            <option value="cancelled">🚫 Cancel</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1763,6 +2127,506 @@ export default function TCDashboard() {
             </div>
           )}
 
+          {/* ── TEAM SECTION ── */}
+          {!loading && active === 'team' && (() => {
+            const filteredTeam = teamMembers.filter(m => {
+              const q = teamSearch.toLowerCase()
+              const matchQ = !q || m.name.toLowerCase().includes(q) || m.mobile.includes(q) || m.email.toLowerCase().includes(q) || m.city.toLowerCase().includes(q)
+              const matchTab = teamTabFilter === 'all' || (teamTabFilter === 'active' ? m.status === 'active' : teamTabFilter === 'inactive' ? m.status === 'inactive' : m.role === teamTabFilter)
+              return matchQ && matchTab
+            })
+
+            const roleColors = {
+              TC: 'bg-orange-100 text-orange-700 border-orange-200',
+              BD: 'bg-violet-100 text-violet-700 border-violet-200',
+              Support: 'bg-blue-100 text-blue-700 border-blue-200',
+              Manager: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+              Trainer: 'bg-cyan-100 text-cyan-700 border-cyan-200',
+              'Field Agent': 'bg-amber-100 text-amber-700 border-amber-200',
+              Other: 'bg-slate-100 text-slate-600 border-slate-200',
+            }
+
+            const saveTeamMember = () => {
+              if (!teamForm.name.trim()) return alert('Name is required')
+              if (teamModal.mode === 'add') {
+                setTeamMembers(prev => [...prev, { ...teamForm, id: Date.now().toString() }])
+              } else {
+                setTeamMembers(prev => prev.map(m => m.id === teamModal.item.id ? { ...m, ...teamForm } : m))
+              }
+              setTeamModal({ open: false, mode: 'add', item: null })
+            }
+
+            const deleteTeamMember = (id) => {
+              if (!window.confirm('Delete this team member?')) return
+              setTeamMembers(prev => prev.filter(m => m.id !== id))
+            }
+
+            const activeCount = teamMembers.filter(m => m.status === 'active').length
+            const inactiveCount = teamMembers.filter(m => m.status === 'inactive').length
+
+            return (
+              <div className="space-y-5">
+                {/* Header */}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-semibold text-neutral-950">Team</h2>
+                    <p className="text-sm text-neutral-500 mt-0.5">{teamMembers.length} total members</p>
+                  </div>
+                  <button type="button"
+                    onClick={() => { setTeamForm(BLANK_TEAM_MEMBER); setTeamModal({ open: true, mode: 'add', item: null }) }}
+                    className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm"
+                    style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
+                    <Plus size={16} /> Add Member
+                  </button>
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total', value: teamMembers.length, cls: 'text-slate-700 bg-slate-50 border-slate-200' },
+                    { label: 'Active', value: activeCount, cls: 'text-emerald-700 bg-emerald-50 border-emerald-100' },
+                    { label: 'Inactive', value: inactiveCount, cls: 'text-red-600 bg-red-50 border-red-100' },
+                    { label: 'Roles', value: [...new Set(teamMembers.map(m => m.role))].length, cls: 'text-violet-700 bg-violet-50 border-violet-100' },
+                  ].map(s => (
+                    <div key={s.label} className={`rounded-xl border p-4 ${s.cls}`}>
+                      <p className="text-xs font-semibold uppercase tracking-wide opacity-70">{s.label}</p>
+                      <p className="text-3xl font-black mt-1">{s.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Filter + Search bar */}
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                  <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-100">
+                    <div className="relative flex-1 min-w-[180px]">
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input type="text" placeholder="Search name, mobile, city…" value={teamSearch}
+                        onChange={e => setTeamSearch(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:border-orange-400" />
+                    </div>
+                    <p className="text-xs text-slate-400 ml-auto">{filteredTeam.length} results</p>
+                  </div>
+
+                  {/* Role/Status tabs */}
+                  <div className="flex flex-wrap gap-0.5 px-4 pt-2 pb-0 border-b border-slate-100">
+                    {[
+                      { key: 'all', label: 'All' },
+                      { key: 'active', label: 'Active' },
+                      { key: 'inactive', label: 'Inactive' },
+                      ...TEAM_ROLES.map(r => ({ key: r, label: r })),
+                    ].map(t => (
+                      <button key={t.key} type="button"
+                        onClick={() => setTeamTabFilter(t.key)}
+                        className={`px-3 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                          teamTabFilter === t.key ? 'border-orange-500 text-orange-600' : 'border-transparent text-neutral-500 hover:text-neutral-800'
+                        }`}>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[700px] border-collapse">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          {['#', 'Member', 'Role', 'Mobile', 'City', 'Joining Date', 'Status', 'Action'].map(h => (
+                            <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600 whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredTeam.length === 0 ? (
+                          <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">No team members found.</td></tr>
+                        ) : filteredTeam.map((m, idx) => (
+                          <tr key={m.id} className="hover:bg-orange-50/20 transition-colors align-middle">
+                            <td className="px-3 py-3 text-xs text-slate-400 tabular-nums">{idx + 1}</td>
+                            <td className="px-3 py-3">
+                              <div className="flex items-center gap-2.5">
+                                {m.imageUrl
+                                  ? <img src={m.imageUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-slate-200 flex-shrink-0" />
+                                  : <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                                      style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
+                                      {m.name.slice(0, 2).toUpperCase()}
+                                    </div>
+                                }
+                                <div>
+                                  <p className="text-sm font-semibold text-neutral-900">{m.name}</p>
+                                  <p className="text-[11px] text-slate-400 truncate max-w-[140px]">{m.email || '—'}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3">
+                              <span className={`inline-block rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${roleColors[m.role] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{m.role}</span>
+                            </td>
+                            <td className="px-3 py-3 text-sm text-slate-700 tabular-nums whitespace-nowrap">{m.mobile || '—'}</td>
+                            <td className="px-3 py-3 text-sm text-slate-600">{m.city || '—'}</td>
+                            <td className="px-3 py-3 text-[11px] text-slate-500 whitespace-nowrap">
+                              {m.joiningDate ? new Date(m.joiningDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                            </td>
+                            <td className="px-3 py-3">
+                              <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold capitalize ${
+                                m.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                              }`}>{m.status}</span>
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              <div className="relative inline-block">
+                                <button type="button"
+                                  data-menu
+                                  onClick={(e) => openMenu(e, 'team', m.id, setTcActionMenu, setTcMenuPos)}
+                                  className="inline-flex items-center justify-center rounded-lg border border-transparent p-1.5 text-slate-500 hover:border-slate-200 hover:bg-slate-50 transition-colors">
+                                  <Settings2 size={15} strokeWidth={2} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Add/Edit Modal */}
+                {teamModal.open && (
+                  <div className={tcModalOverlay} onClick={() => setTeamModal({ open: false, mode: 'add', item: null })}>
+                    <div className="relative w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                      <div className={tcModalHeader}>
+                        <div>
+                          <h2 className={tcModalTitle}>{teamModal.mode === 'add' ? 'Add Team Member' : 'Edit Team Member'}</h2>
+                          <p className={tcModalSub}>Fill in the member details</p>
+                        </div>
+                        <button type="button" onClick={() => setTeamModal({ open: false, mode: 'add', item: null })} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X size={16} /></button>
+                      </div>
+                      <div className={tcModalBody}>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="col-span-2">
+                            <label className={tcLabel}>Full Name *</label>
+                            <input className={tcInput} value={teamForm.name} onChange={e => setTeamForm(p => ({ ...p, name: e.target.value }))} placeholder="Enter full name" />
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Mobile</label>
+                            <input className={tcInput} value={teamForm.mobile} onChange={e => setTeamForm(p => ({ ...p, mobile: e.target.value }))} placeholder="Mobile number" />
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Email</label>
+                            <input className={tcInput} type="email" value={teamForm.email} onChange={e => setTeamForm(p => ({ ...p, email: e.target.value }))} placeholder="Email address" />
+                          </div>
+                          <div className="col-span-2">
+                            <label className={tcLabel}>Profile Photo</label>
+                            <div className="flex items-center gap-3">
+                              {teamForm.imageUrl
+                                ? <img src={teamForm.imageUrl} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-orange-200 flex-shrink-0" />
+                                : <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 border-2 border-orange-200"
+                                    style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
+                                    {teamForm.name ? teamForm.name.slice(0, 2).toUpperCase() : '?'}
+                                  </div>
+                              }
+                              <label className="flex-1 flex items-center gap-2 cursor-pointer rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 hover:border-orange-400 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-400 flex-shrink-0"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                <span className="text-sm text-slate-500">{teamImgUploading ? 'Uploading…' : teamForm.imageUrl ? '✓ Photo uploaded' : 'Choose photo'}</span>
+                                <input type="file" accept="image/*" className="hidden" disabled={teamImgUploading}
+                                  onChange={e => {
+                                    const file = e.target.files?.[0]
+                                    if (!file) return
+                                    setTeamImgUploading(true)
+                                    const reader = new FileReader()
+                                    reader.onload = ev => { setTeamForm(p => ({ ...p, imageUrl: ev.target.result })); setTeamImgUploading(false) }
+                                    reader.readAsDataURL(file)
+                                  }} />
+                              </label>
+                              {teamForm.imageUrl && (
+                                <button type="button" onClick={() => setTeamForm(p => ({ ...p, imageUrl: '' }))}
+                                  className="text-xs text-red-500 hover:text-red-700 whitespace-nowrap">Remove</button>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Role</label>
+                            <select className={tcSelect} value={teamForm.role} onChange={e => setTeamForm(p => ({ ...p, role: e.target.value }))}>
+                              {TEAM_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Status</label>
+                            <select className={tcSelect} value={teamForm.status} onChange={e => setTeamForm(p => ({ ...p, status: e.target.value }))}>
+                              <option value="active">Active</option>
+                              <option value="inactive">Inactive</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className={tcLabel}>City</label>
+                            <input className={tcInput} value={teamForm.city} onChange={e => setTeamForm(p => ({ ...p, city: e.target.value }))} placeholder="City" />
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Joining Date</label>
+                            <input type="date" className={tcInput} value={teamForm.joiningDate} onChange={e => setTeamForm(p => ({ ...p, joiningDate: e.target.value }))} />
+                          </div>
+                          <div className="col-span-2">
+                            <label className={tcLabel}>Address</label>
+                            <input className={tcInput} value={teamForm.address} onChange={e => setTeamForm(p => ({ ...p, address: e.target.value }))} placeholder="Full address" />
+                          </div>
+                          <div className="col-span-2">
+                            <label className={tcLabel}>Notes</label>
+                            <textarea className={tcTextarea} rows={2} value={teamForm.notes} onChange={e => setTeamForm(p => ({ ...p, notes: e.target.value }))} placeholder="Any notes about this member…" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className={tcModalFooter}>
+                        <button type="button" className={tcBtnGhost} onClick={() => setTeamModal({ open: false, mode: 'add', item: null })}>Cancel</button>
+                        <button type="button" className={tcBtnPrimary} style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }} onClick={saveTeamMember}>
+                          {teamModal.mode === 'add' ? 'Add Member' : 'Save Changes'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
+          {!loading && active === 'telegram' && (
+            <div className="space-y-5 max-w-2xl">
+              <div>
+                <h2 className="text-xl font-semibold text-neutral-950">Telegram Alerts</h2>
+                <p className="text-sm text-neutral-500 mt-0.5">Send client, server and meeting alerts to your Telegram group</p>
+              </div>
+
+              {/* Sub tabs */}
+              <div className="flex gap-1 border-b border-slate-200">
+                {[
+                  { id: 'send', label: '📤 Send Alert' },
+                  { id: 'settings', label: '⚙️ Bot Settings' },
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTgActiveSection(t.id)}
+                    className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${
+                      tgActiveSection === t.id
+                        ? 'border-orange-500 text-orange-600'
+                        : 'border-transparent text-neutral-500 hover:text-neutral-800'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── SEND ALERT SECTION ── */}
+              {tgActiveSection === 'send' && (
+                <div className="space-y-4">
+                  {!tgBotToken || !tgChatId ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
+                      <p className="text-sm font-semibold text-amber-700">⚠️ Bot not configured</p>
+                      <p className="text-xs text-amber-600 mt-1">Please save your Bot Token and Chat ID in the "Bot Settings" tab first.</p>
+                      <button
+                        type="button"
+                        onClick={() => setTgActiveSection('settings')}
+                        className="mt-2 text-xs font-semibold text-orange-600 hover:text-orange-800 underline"
+                      >
+                        Go to Settings →
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 flex items-center gap-2">
+                      <span className="text-emerald-600 text-sm font-semibold">✅ Bot connected</span>
+                      <span className="text-xs text-emerald-500">Chat ID: {tgChatId}</span>
+                    </div>
+                  )}
+
+                  {/* Quick Templates */}
+                  <div>
+                    <p className={tcLabel}>Quick Templates</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
+                      {[
+                        {
+                          label: '🤝 Meeting Alert',
+                          msg: `🤝 <b>New Meeting Scheduled</b>\n📋 Agenda: [enter agenda]\n👤 Client: [client name]\n🏢 Server: [server name]\n🕒 Time: [date & time]\n📍 Status: Pending\n\n— Ailocity TC`,
+                        },
+                        {
+                          label: '👤 Client Alert',
+                          msg: `👤 <b>Client Update</b>\n🏢 Business: [business name]\n📞 Mobile: [mobile]\n📧 Email: [email]\n🏷 Status: Active\n\n— Ailocity TC`,
+                        },
+                        {
+                          label: '🏢 Server Alert',
+                          msg: `🏢 <b>Server Update</b>\n🏷 Name: [server name]\n📞 Mobile: [mobile]\n📧 Email: [email]\n✅ KYC: Verified\n\n— Ailocity TC`,
+                        },
+                      ].map((t) => (
+                        <button
+                          key={t.label}
+                          type="button"
+                          onClick={() => setTgMessage(t.msg)}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-left text-sm font-medium text-neutral-800 hover:border-orange-400 hover:bg-orange-50 transition-all shadow-sm"
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Message Box */}
+                  <div>
+                    <label className={tcLabel}>Message</label>
+                    <textarea
+                      className={tcTextarea}
+                      rows={7}
+                      value={tgMessage}
+                      onChange={(e) => setTgMessage(e.target.value)}
+                      placeholder="Type your message here or select a template above...\n\nHTML formatting supported:\n<b>Bold</b>, <i>Italic</i>, <code>Code</code>"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">HTML tags support: &lt;b&gt;, &lt;i&gt;, &lt;code&gt;</p>
+                  </div>
+
+                  {/* Send Result */}
+                  {tgSendResult && (
+                    <div className={`rounded-xl px-4 py-3 text-sm font-medium ${
+                      tgSendResult.ok
+                        ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                        : 'bg-red-50 border border-red-200 text-red-700'
+                    }`}>
+                      {tgSendResult.ok ? '✅ ' : '❌ '}{tgSendResult.msg}
+                    </div>
+                  )}
+
+                  {/* Send Button */}
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      disabled={tgSending || !tgMessage.trim() || !tgBotToken || !tgChatId}
+                      onClick={async () => {
+                        setTgSending(true)
+                        setTgSendResult(null)
+                        try {
+                          const res = await api('/api/business/telegram/send-alert', {
+                            token,
+                            method: 'POST',
+                            body: { message: tgMessage },
+                          })
+                          if (res.ok) {
+                            setTgSendResult({ ok: true, msg: `Alert sent successfully! ${res.notifiedCount > 0 ? `(${res.notifiedCount} portal(s) notified)` : ''}${res.telegramOk ? ' ✅ Telegram delivered' : res.telegramError ? ` ⚠️ Telegram: ${res.telegramError}` : ''}` })
+                            setTgMessage('')
+                          } else {
+                            setTgSendResult({ ok: false, msg: 'Send failed' })
+                          }
+                        } catch (e) {
+                          setTgSendResult({ ok: false, msg: e.message || 'Network error' })
+                        } finally {
+                          setTgSending(false)
+                        }
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}
+                    >
+                      <Send size={15} />
+                      {tgSending ? 'Sending…' : 'Send Alert'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── BOT SETTINGS SECTION ── */}
+              {tgActiveSection === 'settings' && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+                    <p className="text-xs font-semibold text-blue-700 mb-1">📖 Setup Guide</p>
+                    <ol className="text-xs text-blue-600 space-y-1 list-decimal list-inside">
+                      <li>Open <b>@BotFather</b> on Telegram</li>
+                      <li>Send <b>/newbot</b> command and copy the Bot Token</li>
+                      <li>Create a Telegram group, add the bot and make it admin</li>
+                      <li>Send any message in the group, then use getUpdates URL to get Chat ID</li>
+                    </ol>
+                  </div>
+
+                  <div>
+                    <label className={tcLabel}>Bot Token <span className="text-red-500">*</span></label>
+                    <input
+                      className={tcInput}
+                      value={tgBotToken}
+                      onChange={(e) => setTgBotToken(e.target.value)}
+                      placeholder="1234567890:AAHdqTcvCH1vGWJxfSeofSs0K5PALDsaw-w"
+                    />
+                  </div>
+
+                  <div>
+                    <label className={tcLabel}>Chat ID (Group) <span className="text-red-500">*</span></label>
+                    <input
+                      className={tcInput}
+                      value={tgChatId}
+                      onChange={(e) => setTgChatId(e.target.value)}
+                      placeholder="-1001234567890"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Group Chat ID is a negative number (e.g. -1001234567890)</p>
+                  </div>
+
+                  {tgSettingsSaved && (
+                    <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-2.5 text-sm font-medium text-emerald-700">
+                      ✅ Settings saved successfully!
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    {/* Test Connection */}
+                    <button
+                      type="button"
+                      disabled={!tgBotToken || !tgChatId}
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(
+                            `https://api.telegram.org/bot${tgBotToken}/sendMessage`,
+                            {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                chat_id: tgChatId,
+                                text: '🤖 <b>Ailocity TC Bot</b> — Connection test successful! ✅',
+                                parse_mode: 'HTML',
+                              }),
+                            }
+                          )
+                          const data = await res.json()
+                          if (data.ok) alert('✅ Test message sent! Check your Telegram group.')
+                          else alert('❌ Failed: ' + (data.description || 'Unknown error'))
+                        } catch (e) {
+                          alert('❌ Error: ' + e.message)
+                        }
+                      }}
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      🔗 Test Connection
+                    </button>
+
+                    {/* Save Settings */}
+                    <button
+                      type="button"
+                      disabled={tgSettingsSaving || !tgBotToken.trim() || !tgChatId.trim()}
+                      onClick={async () => {
+                        setTgSettingsSaving(true)
+                        setTgSettingsSaved(false)
+                        try {
+                          await api('/api/business/telegram/settings', {
+                            token,
+                            method: 'POST',
+                            body: { botToken: tgBotToken.trim(), chatId: tgChatId.trim() },
+                          })
+                          setTgSettingsSaved(true)
+                          setTimeout(() => setTgSettingsSaved(false), 3000)
+                        } catch (e) {
+                          alert(e.message || 'Save failed')
+                        } finally {
+                          setTgSettingsSaving(false)
+                        }
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}
+                    >
+                      {tgSettingsSaving ? 'Saving…' : '💾 Save Settings'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {!loading && active === 'help' && (
             <div className="max-w-3xl space-y-4">
               <h2 className="text-xl font-semibold text-slate-900">Help</h2>
@@ -1812,6 +2676,191 @@ export default function TCDashboard() {
           )}
         </div>
       </main>
+
+      {/* Team View Modal */}
+      {teamViewItem && (
+        <div className={tcModalOverlay} onClick={() => setTeamViewItem(null)}>
+          <div className="relative w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <div className={tcModalHeader}>
+              <div className="flex items-center gap-3">
+                {teamViewItem.imageUrl
+                  ? <img src={teamViewItem.imageUrl} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-orange-200 flex-shrink-0" />
+                  : <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                      style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
+                      {teamViewItem.name.slice(0, 2).toUpperCase()}
+                    </div>
+                }
+                <div>
+                  <h2 className={tcModalTitle}>{teamViewItem.name}</h2>
+                  <p className={tcModalSub}>{teamViewItem.role} • <span className={`capitalize font-semibold ${ teamViewItem.status === 'active' ? 'text-emerald-600' : 'text-slate-500'}`}>{teamViewItem.status}</span></p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setTeamViewItem(null)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X size={16} /></button>
+            </div>
+            <div className={tcModalBody}>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <PhoneCall size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Mobile</p>
+                    <p className="text-sm font-semibold text-neutral-900">{tcDisplay(teamViewItem.mobile)}</p>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <Mail size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Email</p>
+                    <p className="text-sm font-semibold text-neutral-900 break-all">{tcDisplay(teamViewItem.email)}</p>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <Briefcase size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Role</p>
+                    <p className="text-sm font-semibold text-orange-600">{tcDisplay(teamViewItem.role)}</p>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <MapPin size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">City</p>
+                    <p className="text-sm font-semibold text-neutral-900">{tcDisplay(teamViewItem.city)}</p>
+                  </div>
+                </div>
+                <div className="col-span-2 bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <MapPin size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Address</p>
+                    <p className="text-sm text-neutral-900">{tcDisplay(teamViewItem.address)}</p>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <Calendar size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Joining Date</p>
+                    <p className="text-sm font-semibold text-neutral-900">
+                      {teamViewItem.joiningDate ? new Date(teamViewItem.joiningDate).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : '—'}
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Status</p>
+                  <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold capitalize ${
+                    teamViewItem.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                  }`}>{teamViewItem.status}</span>
+                </div>
+              </div>
+              {teamViewItem.notes && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 mb-0.5">Notes</p>
+                  <p className="text-sm text-neutral-900 whitespace-pre-wrap">{teamViewItem.notes}</p>
+                </div>
+              )}
+            </div>
+            <div className={tcModalFooter}>
+              <button type="button" className={tcBtnGhost}
+                onClick={() => { setTeamViewItem(null); setTeamForm({ ...teamViewItem }); setTeamModal({ open: true, mode: 'edit', item: teamViewItem }) }}>
+                Edit
+              </button>
+              <button type="button" className={tcBtnGhost} onClick={() => setTeamViewItem(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lead View Modal */}
+      {leadViewItem && (
+        <div className={tcModalOverlay} onClick={() => setLeadViewItem(null)}>
+          <div className="relative w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <div className={tcModalHeader}>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
+                  <Users size={16} className="text-white" />
+                </div>
+                <div>
+                  <h2 className={tcModalTitle}>{leadViewItem.name}</h2>
+                  <p className={tcModalSub}>{leadViewItem.source || 'Lead'} • {leadViewItem.createdAt ? new Date(leadViewItem.createdAt).toLocaleDateString('en-IN') : '—'}</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setLeadViewItem(null)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X size={16} /></button>
+            </div>
+            <div className={tcModalBody}>
+              {/* Basic Info */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Mobile</p>
+                  <p className="text-sm font-semibold text-neutral-900">{tcDisplay(leadViewItem.mobile)}</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Email</p>
+                  <p className="text-sm font-semibold text-neutral-900 break-all">{tcDisplay(leadViewItem.email)}</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Source</p>
+                  <p className="text-sm font-semibold text-neutral-900">{tcDisplay(leadViewItem.source)}</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Budget</p>
+                  <p className="text-sm font-semibold text-emerald-600">{leadViewItem.budget ? `₹${leadViewItem.budget}` : '—'}</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Priority</p>
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold capitalize ${pill(leadViewItem.priority)}`}>{tcDisplay(leadViewItem.priority)}</span>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Status</p>
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold capitalize ${pill(leadViewItem.status)}`}>{tcDisplay(leadViewItem.status)}</span>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Assigned To</p>
+                  <p className="text-sm font-semibold text-violet-700">{tcDisplay(leadViewItem.assignedName)}</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Follow Up Date</p>
+                  <p className="text-sm font-semibold text-neutral-900">{leadViewItem.followUpDate ? new Date(leadViewItem.followUpDate).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : '—'}</p>
+                </div>
+              </div>
+
+              {/* Requirement */}
+              <div className="bg-slate-50 rounded-lg px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Requirement</p>
+                <p className="text-sm text-neutral-900 whitespace-pre-wrap">{tcDisplay(leadViewItem.requirement)}</p>
+              </div>
+
+              {/* TC Notes */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 mb-0.5">TC Notes</p>
+                <p className="text-sm text-neutral-900 whitespace-pre-wrap">{tcDisplay(leadViewItem.notes)}</p>
+              </div>
+
+              {/* BD Notes */}
+              <div className="bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-600 mb-0.5">BD Notes</p>
+                <p className="text-sm text-neutral-900 whitespace-pre-wrap">{tcDisplay(leadViewItem.bdNotes)}</p>
+              </div>
+
+              {/* Timestamps */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Created</p>
+                  <p className="text-xs text-neutral-700">{fmtDt(leadViewItem.createdAt)}</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Last Updated</p>
+                  <p className="text-xs text-neutral-700">{fmtDt(leadViewItem.updatedAt)}</p>
+                </div>
+              </div>
+            </div>
+            <div className={tcModalFooter}>
+              <button type="button" className={tcBtnGhost}
+                onClick={() => { setLeadViewItem(null); setLeadForm({ ...leadViewItem }); setLeadModal({ open: true, item: leadViewItem }) }}>
+                Edit
+              </button>
+              <button type="button" className={tcBtnGhost} onClick={() => setLeadViewItem(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* View modals (read-only) */}
       {viewMeeting && (
@@ -2214,6 +3263,7 @@ export default function TCDashboard() {
                   >
                     <option value="hot">Hot</option>
                     <option value="warm">Warm</option>
+                    <option value="cancelled">Cancelled</option>
                   </select>
                 </div>
                 <div>
@@ -2602,6 +3652,65 @@ export default function TCDashboard() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {/* Global Action Dropdown Portal — renders outside any overflow:hidden */}
+      {tcActionMenu && (
+        <div
+          className={tcDropdown}
+          style={{ top: tcMenuPos.top, left: tcMenuPos.left }}
+          data-menu
+          onClick={e => e.stopPropagation()}
+        >
+          {tcActionMenu.kind === 'lead' && (() => {
+            const l = leads.find(x => x.id === tcActionMenu.id)
+            if (!l) return null
+            return (
+              <>
+                <button type="button" className={tcDropdownItem}
+                  onClick={() => { setTcActionMenu(null); setLeadViewItem(l) }}>
+                  <Eye size={15} /> View
+                </button>
+                <button type="button" className={tcDropdownItem}
+                  onClick={() => { setTcActionMenu(null); setLeadForm({ ...l }); setLeadModal({ open: true, item: l }) }}>
+                  <Pencil size={15} /> Edit
+                </button>
+                <button type="button" className={tcDropdownItemDanger}
+                  onClick={async () => {
+                    if (!window.confirm('Delete this lead?')) return
+                    setTcActionMenu(null)
+                    try { await api(`/api/business/leads/${l.id}`, { token, method: 'DELETE' }); await load() }
+                    catch(e) { alert(e.message || 'Failed') }
+                  }}>
+                  <Trash2 size={15} /> Delete
+                </button>
+              </>
+            )
+          })()}
+          {tcActionMenu.kind === 'team' && (() => {
+            const m = teamMembers.find(x => x.id === tcActionMenu.id)
+            if (!m) return null
+            return (
+              <>
+                <button type="button" className={tcDropdownItem}
+                  onClick={() => { setTcActionMenu(null); setTeamViewItem(m) }}>
+                  <Eye size={15} /> View
+                </button>
+                <button type="button" className={tcDropdownItem}
+                  onClick={() => { setTcActionMenu(null); setTeamForm({ ...m }); setTeamModal({ open: true, mode: 'edit', item: m }) }}>
+                  <Pencil size={15} /> Edit
+                </button>
+                <button type="button" className={tcDropdownItemDanger}
+                  onClick={() => {
+                    setTcActionMenu(null)
+                    if (!window.confirm('Delete this team member?')) return
+                    setTeamMembers(prev => prev.filter(x => x.id !== m.id))
+                  }}>
+                  <Trash2 size={15} /> Delete
+                </button>
+              </>
+            )
+          })()}
         </div>
       )}
     </div>

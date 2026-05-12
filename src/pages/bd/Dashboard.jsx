@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, UserRound, Settings, LogOut, Menu, X,
   ChevronDown, ChevronRight, CalendarDays, BookOpen,
-  Bot, TrendingUp, DollarSign, Users, Plus, Eye, Pencil, Trash2, Upload, Package, Bell,
+  Bot, TrendingUp, DollarSign, Users, Plus, Eye, Pencil, Trash2, Upload, Package, Bell, FileText,
 } from 'lucide-react'
 import { api, TOKEN_BD } from '../../lib/api'
 
 const MAIN_TABS = [
   { id: 'overview',  label: 'Overview',  icon: LayoutDashboard },
+  { id: 'leads',     label: 'My Leads',  icon: FileText },
   { id: 'business',  label: 'Business',  icon: Package },
   { id: 'users',     label: 'BD Users',  icon: Users },
   { id: 'meetings',  label: 'Meetings',  icon: CalendarDays },
@@ -65,6 +66,25 @@ export default function BDDashboard() {
   const [businessTab, setBusinessTab] = useState('all')
   const [businessRows, setBusinessRows] = useState([])
   const [bdMeetings, setBdMeetings] = useState([])
+  const [bdNotifications, setBdNotifications] = useState([])
+  const [bdLeads, setBdLeads] = useState([])
+  const [bdRemarkModal, setBdRemarkModal] = useState({ open: false, lead: null })
+  const [bdRemarkForm, setBdRemarkForm] = useState({ status: '', followUpDate: '', bdNotes: '' })
+  const [bdRemarkSaving, setBdRemarkSaving] = useState(false)
+
+  useEffect(() => {
+    if (!token) return
+    api('/api/business/notifications', { token })
+      .then((r) => setBdNotifications(r.notifications || []))
+      .catch(() => {})
+  }, [token, active])
+
+  const bdMarkAllRead = async () => {
+    await api('/api/business/notifications/read-all', { token, method: 'PATCH' })
+    setBdNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+  }
+
+  const bdUnreadCount = bdNotifications.filter((n) => !n.read).length
 
   useEffect(() => {
     const h = (e) => {
@@ -76,18 +96,20 @@ export default function BDDashboard() {
   }, [])
 
   const load = useCallback(async () => {
-    const [meRes, dashRes, usersRes, bizRes, meetingsRes] = await Promise.all([
+    const [meRes, dashRes, usersRes, bizRes, meetingsRes, leadsRes] = await Promise.all([
       api('/api/bd/me', { token }),
       api('/api/bd/dashboard', { token }),
       api('/api/bd/users', { token }),
       api('/api/bd/business', { token }),
       api('/api/bd/meetings', { token }),
+      api('/api/business/leads', { token }),
     ])
     setMe(meRes)
     setDash(dashRes)
     setBdUsers(usersRes.bdUsers || [])
     setBusinessRows(bizRes.businesses || [])
     setBdMeetings(meetingsRes.meetings || [])
+    setBdLeads(leadsRes.leads || [])
   }, [token])
 
   const refreshUsers = useCallback(async () => {
@@ -265,6 +287,115 @@ export default function BDDashboard() {
               </div>
             </div>
           )}
+
+          {/* My Leads — assigned by TC */}
+          {!loading && active === 'leads' && (() => {
+            const STATUS_COLORS = {
+              new: 'bg-blue-100 text-blue-700',
+              contacted: 'bg-amber-100 text-amber-700',
+              qualified: 'bg-emerald-100 text-emerald-700',
+              lost: 'bg-red-100 text-red-700',
+              high: 'bg-red-100 text-red-700',
+              medium: 'bg-amber-100 text-amber-700',
+              low: 'bg-blue-100 text-blue-700',
+            }
+            const pill = (v) => STATUS_COLORS[String(v||'').toLowerCase()] || 'bg-slate-200 text-slate-600'
+            const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold text-slate-900">My Leads</h2>
+                    <p className="text-sm text-slate-500 mt-0.5">{bdLeads.length} leads assigned to you by TC</p>
+                  </div>
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[{ label: 'New', key: 'new', cls: 'text-blue-600 bg-blue-50 border-blue-100' },
+                    { label: 'Contacted', key: 'contacted', cls: 'text-amber-600 bg-amber-50 border-amber-100' },
+                    { label: 'Qualified', key: 'qualified', cls: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
+                    { label: 'Lost', key: 'lost', cls: 'text-red-600 bg-red-50 border-red-100' },
+                  ].map(s => (
+                    <div key={s.key} className={`rounded-xl border p-3 ${s.cls}`}>
+                      <p className="text-xs font-semibold uppercase tracking-wide opacity-70">{s.label}</p>
+                      <p className="text-2xl font-black mt-0.5">{bdLeads.filter(l => l.status === s.key).length}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {bdLeads.length === 0 ? (
+                  <div className="bg-white border border-dashed border-slate-300 rounded-xl px-6 py-16 text-center">
+                    <FileText size={32} className="mx-auto mb-3 text-slate-300" />
+                    <p className="text-sm font-medium text-slate-400">No leads assigned yet</p>
+                    <p className="text-xs text-slate-400 mt-1">TC will assign leads to you from their Lead Management section</p>
+                  </div>
+                ) : (
+                  <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[700px] border-collapse">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr>
+                            {['#', 'Name', 'Mobile', 'Requirement', 'Budget', 'Priority', 'Status', 'Follow Up', 'BD Notes', 'Assigned By', 'Action'].map(h => (
+                              <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600 whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {[...bdLeads].reverse().map((l, idx) => (
+                            <tr key={l.id} className="hover:bg-orange-50/30 transition-colors align-middle">
+                              <td className="px-3 py-3 text-xs text-slate-400">{idx + 1}</td>
+                              <td className="px-3 py-3">
+                                <p className="text-sm font-semibold text-slate-900">{l.name}</p>
+                                {l.email && <p className="text-[11px] text-slate-400">{l.email}</p>}
+                              </td>
+                              <td className="px-3 py-3 text-sm text-slate-700 whitespace-nowrap">{l.mobile || '—'}</td>
+                              <td className="px-3 py-3">
+                                <p className="text-xs text-slate-600 line-clamp-1 max-w-[120px]">{l.requirement || '—'}</p>
+                              </td>
+                              <td className="px-3 py-3 text-xs font-semibold text-emerald-600 whitespace-nowrap">{l.budget ? `₹${l.budget}` : '—'}</td>
+                              <td className="px-3 py-3">
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold capitalize whitespace-nowrap ${pill(l.priority)}`}>{l.priority}</span>
+                              </td>
+                              <td className="px-3 py-3">
+                                <select value={l.status}
+                                  onChange={async (e) => {
+                                    try {
+                                      await api(`/api/business/leads/${l.id}/bd-update`, { token, method: 'PATCH', body: { status: e.target.value } })
+                                      await load()
+                                    } catch(err) { alert(err.message || 'Failed') }
+                                  }}
+                                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold capitalize border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-orange-400 ${pill(l.status)}`}>
+                                  {['new','contacted','qualified','lost'].map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                              </td>
+                              <td className="px-3 py-3 text-[11px] text-slate-500 whitespace-nowrap">{fmtDate(l.followUpDate)}</td>
+                              <td className="px-3 py-3">
+                                {l.bdNotes
+                                  ? <p className="text-xs text-slate-600 line-clamp-1 max-w-[100px]" title={l.bdNotes}>{l.bdNotes}</p>
+                                  : <span className="text-xs text-slate-300">—</span>}
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className="text-[11px] font-medium text-violet-700 bg-violet-50 border border-violet-100 rounded-full px-2 py-0.5 whitespace-nowrap">{l.assignedBy || 'TC'}</span>
+                              </td>
+                              <td className="px-3 py-3">
+                                <button type="button"
+                                  onClick={() => { setBdRemarkForm({ status: l.status, followUpDate: l.followUpDate || '', bdNotes: l.bdNotes || '' }); setBdRemarkModal({ open: true, lead: l }) }}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-orange-600 hover:text-orange-800 border border-orange-200 bg-orange-50 rounded-lg px-2.5 py-1 whitespace-nowrap">
+                                  ✏️ Update
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Business */}
           {!loading && active === 'business' && (
@@ -531,71 +662,116 @@ export default function BDDashboard() {
 
           {/* Notifications */}
           {!loading && active === 'notifications' && (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-semibold text-slate-900">Notifications</h2>
-                  <p className="text-slate-500 text-sm mt-1">Meetings assigned to you</p>
                 </div>
                 <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full px-4 py-1.5">
                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
                   <span className="text-emerald-700 text-xs font-semibold">Email alerts enabled</span>
                 </div>
               </div>
-              {bdMeetings.length === 0 ? (
-                <div className="bg-white border border-slate-200 rounded-xl p-10 shadow-sm flex flex-col items-center justify-center text-center gap-3">
-                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
-                    <Bell size={28} className="text-white" />
+
+              {/* TC Alerts */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">📢 TC Alerts</h3>
+                  {bdUnreadCount > 0 && (
+                    <button type="button" onClick={bdMarkAllRead}
+                      className="text-xs font-medium text-orange-600 hover:text-orange-800 border border-orange-200 rounded-lg px-3 py-1">
+                      Mark all as read
+                    </button>
+                  )}
+                </div>
+                {bdNotifications.filter(n => n.type !== 'lead_assign').length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-xl px-5 py-6 text-center">
+                    <p className="text-sm text-slate-400">No TC alerts yet.</p>
                   </div>
-                  <p className="text-slate-800 font-semibold">No meetings assigned yet</p>
-                  <p className="text-slate-500 text-sm max-w-sm">You will receive an email notification whenever a meeting is assigned to you.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {bdMeetings.map((m) => {
-                    const statusColor = m.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : m.status === 'cancelled' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700'
-                    const outcomeColor = m.outcome === 'positive' ? 'bg-emerald-100 text-emerald-700' : m.outcome === 'negative' ? 'bg-red-100 text-red-700' : m.outcome === 'neutral' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
-                    return (
-                      <div key={m.id} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                        <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg,#FF7A00,#FFB000)' }} />
-                        <div className="px-5 py-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-slate-900 text-sm leading-snug">{m.agenda}</p>
-                              <p className="text-xs text-slate-500 mt-1">
-                                {m.scheduledAt ? new Date(m.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${statusColor}`}>{m.status}</span>
-                              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${outcomeColor}`}>{m.outcome}</span>
-                            </div>
+                ) : bdNotifications.filter(n => n.type !== 'lead_assign').map((n) => (
+                  <div key={n.id} className={`bg-white border rounded-xl px-4 py-3 shadow-sm flex items-start gap-3 ${
+                    n.read ? 'border-slate-200' : 'border-orange-300 bg-orange-50/40'
+                  }`}>
+                    <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${n.read ? 'bg-slate-300' : 'bg-orange-500'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-800 whitespace-pre-wrap">{n.message}</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {n.sentBy} • {n.sentAt ? new Date(n.sentAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Lead Assignments */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">📋 Lead Assignments</h3>
+                {bdNotifications.filter(n => n.type === 'lead_assign').length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-xl px-5 py-6 text-center">
+                    <p className="text-sm text-slate-400">No leads assigned yet.</p>
+                  </div>
+                ) : bdNotifications.filter(n => n.type === 'lead_assign').map((n) => (
+                  <div key={n.id} className={`bg-white border rounded-xl px-4 py-3 shadow-sm flex items-start gap-3 ${
+                    n.read ? 'border-slate-200' : 'border-violet-300 bg-violet-50/40'
+                  }`}>
+                    <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${n.read ? 'bg-slate-300' : 'bg-violet-500'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-800 whitespace-pre-wrap">{n.message}</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {n.sentBy} • {n.sentAt ? new Date(n.sentAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                      </p>
+                    </div>
+                    <button type="button" onClick={() => setActive('leads')}
+                      className="flex-shrink-0 text-xs font-semibold text-violet-600 hover:text-violet-800 border border-violet-200 rounded-lg px-2.5 py-1">
+                      View Lead →
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Meetings assigned to BD */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">🤝 Meetings Assigned to You</h3>
+                {bdMeetings.length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-xl px-5 py-6 text-center">
+                    <p className="text-sm text-slate-400">No meetings assigned yet.</p>
+                  </div>
+                ) : bdMeetings.map((m) => {
+                  const statusColor = m.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : m.status === 'cancelled' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700'
+                  const outcomeColor = m.outcome === 'positive' ? 'bg-emerald-100 text-emerald-700' : m.outcome === 'negative' ? 'bg-red-100 text-red-700' : m.outcome === 'neutral' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                  return (
+                    <div key={m.id} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                      <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg,#FF7A00,#FFB000)' }} />
+                      <div className="px-5 py-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-slate-900 text-sm leading-snug">{m.agenda}</p>
+                            <p className="text-xs text-slate-500 mt-1">{m.scheduledAt ? new Date(m.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</p>
                           </div>
-                          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            {[
-                              ['Server', m.serverName],
-                              ['Client', m.clientName],
-                              ['Contact Person', m.contactPerson],
-                              ['Contact No.', m.contactNumber],
-                            ].map(([label, value]) => (
-                              <div key={label}>
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</p>
-                                <p className="text-xs font-semibold text-slate-800 mt-0.5">{value || '—'}</p>
-                              </div>
-                            ))}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${statusColor}`}>{m.status}</span>
+                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${outcomeColor}`}>{m.outcome}</span>
                           </div>
-                          {m.noteForBd && (
-                            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500">Note for you</p>
-                              <p className="text-xs text-slate-700 mt-0.5">{m.noteForBd}</p>
-                            </div>
-                          )}
                         </div>
+                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {[['Server', m.serverName], ['Client', m.clientName], ['Contact Person', m.contactPerson], ['Contact No.', m.contactNumber]].map(([label, value]) => (
+                            <div key={label}>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</p>
+                              <p className="text-xs font-semibold text-slate-800 mt-0.5">{value || '—'}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {m.noteForBd && (
+                          <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-500">Note for you</p>
+                            <p className="text-xs text-slate-700 mt-0.5">{m.noteForBd}</p>
+                          </div>
+                        )}
                       </div>
-                    )
-                  })}
-                </div>
-              )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
 
@@ -623,6 +799,65 @@ export default function BDDashboard() {
           )}
         </div>
       </main>
+
+      {/* BD Lead Remark Modal */}
+      {bdRemarkModal.open && bdRemarkModal.lead && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setBdRemarkModal({ open: false, lead: null })}>
+          <div className="relative w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">Update Lead</h2>
+                <p className="text-xs text-slate-500 mt-0.5">{bdRemarkModal.lead.name} • {bdRemarkModal.lead.mobile}</p>
+              </div>
+              <button type="button" onClick={() => setBdRemarkModal({ open: false, lead: null })} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X size={16} /></button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Status</label>
+                <select value={bdRemarkForm.status} onChange={e => setBdRemarkForm(p => ({ ...p, status: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-orange-400">
+                  <option value="new">New</option>
+                  <option value="contacted">Contacted</option>
+                  <option value="qualified">Qualified</option>
+                  <option value="lost">Lost</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Follow Up Date</label>
+                <input type="date" value={bdRemarkForm.followUpDate} onChange={e => setBdRemarkForm(p => ({ ...p, followUpDate: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-orange-400" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Remarks / Notes</label>
+                <textarea rows={4} value={bdRemarkForm.bdNotes} onChange={e => setBdRemarkForm(p => ({ ...p, bdNotes: e.target.value }))}
+                  placeholder="What happened? What was discussed? Next steps..."
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-orange-400 resize-none" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+              <button type="button" onClick={() => setBdRemarkModal({ open: false, lead: null })}
+                className="rounded-lg border border-slate-200 px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" disabled={bdRemarkSaving}
+                onClick={async () => {
+                  setBdRemarkSaving(true)
+                  try {
+                    await api(`/api/business/leads/${bdRemarkModal.lead.id}/bd-update`, {
+                      token, method: 'PATCH',
+                      body: { status: bdRemarkForm.status, followUpDate: bdRemarkForm.followUpDate, bdNotes: bdRemarkForm.bdNotes }
+                    })
+                    await load()
+                    setBdRemarkModal({ open: false, lead: null })
+                  } catch(e) { alert(e.message || 'Failed') }
+                  finally { setBdRemarkSaving(false) }
+                }}
+                className="rounded-lg px-5 py-1.5 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
+                {bdRemarkSaving ? 'Saving…' : 'Save Update'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* User Add/Edit Modal */}
       {userModal.open && (

@@ -275,6 +275,11 @@ export default function ClientPortal() {
   const [contactKycFilter, setContactKycFilter] = useState('all')
   const [contactCategoryFilter, setContactCategoryFilter] = useState('all')
   const [contactTerritoryFilter, setContactTerritoryFilter] = useState('all')
+  // Territory filter state — cascading
+  const [tfState, setTfState] = useState('')
+  const [tfCity, setTfCity] = useState('')
+  const [tfRegion, setTfRegion] = useState('')
+  const [tfPod, setTfPod] = useState('')
   const [contactStep, setContactStep] = useState(1)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
@@ -418,7 +423,7 @@ export default function ClientPortal() {
   }, [active, token, loadTabCollection])
 
   useEffect(() => {
-    if (active === 'territory' && token) {
+    if ((active === 'territory' || active === 'contacts') && token) {
       loadTerritoryTree()
     }
   }, [active, token, loadTerritoryTree])
@@ -1102,16 +1107,41 @@ export default function ClientPortal() {
             const subFiltered = contactSubTab === 'all' || subTabs.length === 0
               ? tabFiltered
               : tabFiltered.filter(r => (r.mbcSubCategory || '') === contactSubTab)
+
+            // Territory cascading filter
+            const tfStateObj  = territoryData.states?.find(s => s.id === tfState)
+            const tfCityObj   = tfStateObj?.cities?.find(c => c.id === tfCity)
+            const tfRegionObj = tfCityObj?.regions?.find(r => r.id === tfRegion)
+            const tfAvailCities  = tfStateObj?.cities  || []
+            const tfAvailRegions = tfCityObj?.regions  || []
+            const tfAvailPods    = tfRegionObj?.pods   || []
+
+            const territoryFiltered = (() => {
+              if (!tfState) return subFiltered
+              return subFiltered.filter(r => {
+                const t = r.territory || {}
+                if (tfState  && t.stateId  !== tfState)  return false
+                if (tfCity   && t.cityId   !== tfCity)   return false
+                if (tfRegion && t.regionId !== tfRegion) return false
+                if (tfPod    && t.podId    !== tfPod)    return false
+                return true
+              })
+            })()
+
             const filteredRows = contactSearch.trim()
-              ? subFiltered.filter(r =>
+              ? territoryFiltered.filter(r =>
                   (r.name || '').toLowerCase().includes(contactSearch.toLowerCase()) ||
                   (r.company || '').toLowerCase().includes(contactSearch.toLowerCase()) ||
                   (r.email || '').toLowerCase().includes(contactSearch.toLowerCase()) ||
                   (r.mobile || '').includes(contactSearch)
                 )
-              : subFiltered
+              : territoryFiltered
             const totalPages = Math.ceil(filteredRows.length / CONTACTS_PER_PAGE)
             const pagedRows = filteredRows.slice((contactPage - 1) * CONTACTS_PER_PAGE, contactPage * CONTACTS_PER_PAGE)
+
+            const resetTerritoryFilter = () => { setTfState(''); setTfCity(''); setTfRegion(''); setTfPod(''); setContactPage(1) }
+            const isTerritoryFiltered = !!tfState
+
             return (
               <div className="space-y-5">
                 <div className="flex items-center justify-between">
@@ -1124,7 +1154,7 @@ export default function ClientPortal() {
                   </button>
                 </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { label: 'Total',   value: rows.length,                                                                     color: 'text-slate-900' },
                     { label: 'Clients', value: rows.filter(r => String(r.type||'').toLowerCase() === 'client').length,          color: 'text-orange-600' },
@@ -1136,6 +1166,104 @@ export default function ClientPortal() {
                       <p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p>
                     </div>
                   ))}
+                </div>
+
+                {/* Territory Filter Panel */}
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <MapPin size={14} className="text-orange-500" />
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">Territory Filter</span>
+                      {isTerritoryFiltered && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-600">
+                          {filteredRows.length} result{filteredRows.length !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                    {isTerritoryFiltered && (
+                      <button type="button" onClick={resetTerritoryFilter} className="text-xs text-slate-400 hover:text-red-500 font-medium transition-colors">
+                        ✕ Clear filter
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4 py-3">
+                    {/* State */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">State</label>
+                      <select
+                        value={tfState}
+                        onChange={e => { setTfState(e.target.value); setTfCity(''); setTfRegion(''); setTfPod(''); setContactPage(1) }}
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+                      >
+                        <option value="">All States</option>
+                        {(territoryData.states || []).map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* City */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">City</label>
+                      <select
+                        value={tfCity}
+                        onChange={e => { setTfCity(e.target.value); setTfRegion(''); setTfPod(''); setContactPage(1) }}
+                        disabled={!tfState}
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <option value="">All Cities</option>
+                        {tfAvailCities.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* Region */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Region</label>
+                      <select
+                        value={tfRegion}
+                        onChange={e => { setTfRegion(e.target.value); setTfPod(''); setContactPage(1) }}
+                        disabled={!tfCity}
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <option value="">All Regions</option>
+                        {tfAvailRegions.map(r => (
+                          <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* POD */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">POD</label>
+                      <select
+                        value={tfPod}
+                        onChange={e => { setTfPod(e.target.value); setContactPage(1) }}
+                        disabled={!tfRegion}
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <option value="">All PODs</option>
+                        {tfAvailPods.map(p => (
+                          <option key={p.id} value={p.id}>{p.podNumber} — {p.podName}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {/* Active filter breadcrumb */}
+                  {isTerritoryFiltered && (
+                    <div className="px-4 pb-2.5 flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] text-slate-400 font-medium">Filtering by:</span>
+                      {[
+                        tfStateObj?.name,
+                        tfCityObj?.name,
+                        tfRegionObj?.name ? `${tfRegionObj.name} Region` : null,
+                        tfAvailPods.find(p => p.id === tfPod)?.podNumber,
+                      ].filter(Boolean).map((label, i, arr) => (
+                        <span key={i} className="flex items-center gap-1">
+                          <span className="rounded-md bg-orange-50 border border-orange-200 px-2 py-0.5 text-[10px] font-semibold text-orange-700">{label}</span>
+                          {i < arr.length - 1 && <ChevronRight size={10} className="text-slate-300" />}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
