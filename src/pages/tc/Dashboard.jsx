@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, PhoneCall, Users, FileText, Settings, Package,
@@ -213,10 +214,19 @@ function tcDisplay(v) {
   return String(v)
 }
 
+const TEAM_MENU_W = 184 // 11.5rem
+const TEAM_MENU_H = 172 // ~3 rows + padding
+
 function openMenu(e, kind, id, setMenu, setPos) {
   const rect = e.currentTarget.getBoundingClientRect()
-  setPos({ top: rect.bottom + 4, left: rect.right - 160 })
-  setMenu(cur => cur?.kind === kind && cur?.id === id ? null : { kind, id })
+  const spaceBelow = window.innerHeight - rect.bottom - 8
+  const spaceAbove = rect.top - 8
+  const flipUp = spaceBelow < TEAM_MENU_H && spaceAbove > spaceBelow
+  const top = flipUp ? Math.max(8, rect.top - TEAM_MENU_H - 4) : rect.bottom + 4
+  let left = rect.right - TEAM_MENU_W
+  left = Math.max(8, Math.min(left, window.innerWidth - TEAM_MENU_W - 8))
+  setPos({ top, left })
+  setMenu((cur) => (cur?.kind === kind && cur?.id === id ? null : { kind, id }))
 }
 
 export default function TCDashboard() {
@@ -246,7 +256,7 @@ export default function TCDashboard() {
   const [dropOpen, setDropOpen] = useState(false)
   const dropRef = useRef(null)
   const menuRef = useRef(null)
-  /** @type {[null | { kind: 'meeting' | 'report' | 'dial' | 'aicall' | 'training' | 'lead', id: string }, React.Dispatch<React.SetStateAction<null | { kind: 'meeting' | 'report' | 'dial' | 'aicall' | 'training' | 'lead', id: string }>>]} */
+  /** @type {[null | { kind: 'meeting' | 'report' | 'dial' | 'aicall' | 'training' | 'lead' | 'team', id: string }, React.Dispatch<React.SetStateAction<null | { kind: 'meeting' | 'report' | 'dial' | 'aicall' | 'training' | 'lead' | 'team', id: string }>>]} */
   const [tcActionMenu, setTcActionMenu] = useState(null)
   const [tcMenuPos, setTcMenuPos] = useState({ top: 0, left: 0 })
   const [viewMeeting, setViewMeeting] = useState(null)
@@ -268,21 +278,36 @@ export default function TCDashboard() {
   const [savingMisc, setSavingMisc] = useState(false)
 
   // ── Team state ──────────────────────────────────────────────────────────────
-  const TEAM_ROLES = ['TC', 'BD', 'Support', 'Manager', 'Trainer', 'Field Agent', 'Other']
-  const BLANK_TEAM_MEMBER = { name: '', email: '', mobile: '', role: 'TC', city: '', address: '', status: 'active', joiningDate: '', notes: '', imageUrl: '' }
-  const [teamMembers, setTeamMembers] = useState([
-    { id: '1', name: 'Rahul Sharma', email: 'rahul@ailocity.com', mobile: '9876543210', role: 'TC', city: 'Mumbai', address: 'Andheri West, Mumbai', status: 'active', joiningDate: '2024-01-15', notes: 'Senior TC, handles west zone', imageUrl: '' },
-    { id: '2', name: 'Priya Verma', email: 'priya@ailocity.com', mobile: '9812345678', role: 'BD', city: 'Delhi', address: 'Connaught Place, Delhi', status: 'active', joiningDate: '2024-02-10', notes: 'BD partner, north region', imageUrl: '' },
-    { id: '3', name: 'Amit Patel', email: 'amit@ailocity.com', mobile: '9988776655', role: 'Support', city: 'Ahmedabad', address: 'SG Highway, Ahmedabad', status: 'active', joiningDate: '2024-03-05', notes: '', imageUrl: '' },
-    { id: '4', name: 'Sneha Joshi', email: 'sneha@ailocity.com', mobile: '9765432109', role: 'Trainer', city: 'Pune', address: 'Hinjewadi, Pune', status: 'inactive', joiningDate: '2023-11-20', notes: 'On leave', imageUrl: '' },
-    { id: '5', name: 'Vikram Singh', email: 'vikram@ailocity.com', mobile: '9654321098', role: 'Field Agent', city: 'Jaipur', address: 'Malviya Nagar, Jaipur', status: 'active', joiningDate: '2024-04-01', notes: 'Rajasthan zone', imageUrl: '' },
-  ])
+  const TEAM_ROLES = ['Director', 'Manager', 'Executor', 'TC', 'BD', 'Field Agent', 'Support', 'Trainer', 'Other']
+  const TEAM_DEPARTMENTS = ['Sales', 'Operations', 'Support', 'Training', 'Field', 'Management']
+  const BLANK_TEAM_MEMBER = {
+    name: '',
+    email: '',
+    mobile: '',
+    role: 'TC',
+    department: 'Sales',
+    city: '',
+    address: '',
+    status: 'active',
+    joiningDate: '',
+    notes: '',
+    imageUrl: '',
+    reportingTo: '',
+    employeeId: '',
+    designation: '',
+  }
+  const [teamMembers, setTeamMembers] = useState([])
   const [teamModal, setTeamModal] = useState({ open: false, mode: 'add', item: null })
   const [teamForm, setTeamForm] = useState(BLANK_TEAM_MEMBER)
   const [teamViewItem, setTeamViewItem] = useState(null)
   const [teamTabFilter, setTeamTabFilter] = useState('all')
+  /** Team = full roster + role chips; Director / Manager / Executor = dedicated lists */
+  const [teamSegment, setTeamSegment] = useState('team') // 'team' | 'director' | 'manager' | 'executor'
   const [teamSearch, setTeamSearch] = useState('')
   const [teamImgUploading, setTeamImgUploading] = useState(false)
+  const [teamLoading, setTeamLoading] = useState(false)
+  const [teamView, setTeamView] = useState('list') // 'list' | 'hierarchy' | 'department'
+  const [expandedManagers, setExpandedManagers] = useState(new Set(['2', '3']))
 
   // ── Lead management state ───────────────────────────────────────────────────
   const BLANK_LEAD = { name: '', email: '', mobile: '', source: 'Direct', requirement: '', budget: '', status: 'new', priority: 'medium', assignedTo: '', assignedName: '', followUpDate: '', notes: '' }
@@ -362,6 +387,21 @@ export default function TCDashboard() {
     setBdAssignees(bdRes.assignees || [])
   }, [token])
 
+  const loadTeam = useCallback(async () => {
+    if (!token) return
+    setTeamLoading(true)
+    try {
+      const res = await api('/api/business/team-members', { token })
+      const raw = res?.members ?? res?.data?.members
+      const list = Array.isArray(raw) ? raw : []
+      setTeamMembers(list)
+    } catch (e) {
+      console.error('Team load failed', e)
+    } finally {
+      setTeamLoading(false)
+    }
+  }, [token])
+
   useEffect(() => {
     if (!token) return
     let cancelled = false
@@ -386,6 +426,16 @@ export default function TCDashboard() {
     const tp = Math.max(1, Math.ceil(filtered.length / BUSINESS_PER_PAGE))
     setBusinessPage((p) => Math.min(Math.max(1, p), tp))
   }, [contacts, businessTab])
+
+  useEffect(() => {
+    if (active === 'team') loadTeam()
+  }, [active, loadTeam])
+
+  useEffect(() => {
+    if (active !== 'team') {
+      setTcActionMenu((cur) => (cur?.kind === 'team' ? null : cur))
+    }
+  }, [active])
 
   if (!token) return null
 
@@ -477,6 +527,16 @@ export default function TCDashboard() {
       await load()
       setMeetingModal({ open: false, mode: 'add', item: null })
       setMeetingForm(BLANK_MEETING)
+
+      // Send Telegram alert for new meeting
+      if (meetingModal.mode === 'add' && tgBotToken && tgChatId) {
+        const msg = `🤝 <b>New Meeting Scheduled</b>\n📋 <b>Agenda:</b> ${meetingForm.agenda}\n🏢 <b>Server:</b> ${meetingForm.serverName || '—'}\n👤 <b>Client:</b> ${meetingForm.clientName || '—'}\n👔 <b>BD:</b> ${meetingForm.assignBdName || '—'}\n🕒 <b>Time:</b> ${meetingForm.scheduledAt ? new Date(meetingForm.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}\n📍 <b>Status:</b> ${meetingForm.status}\n🔥 <b>Disposition:</b> ${meetingForm.disposition}\n\n— Ailocity TC`
+        fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: tgChatId, text: msg, parse_mode: 'HTML' }),
+        }).catch(() => {})
+      }
     } catch (e) {
       alert(e.message || 'Save failed')
     } finally {
@@ -2129,252 +2189,1036 @@ export default function TCDashboard() {
 
           {/* ── TEAM SECTION ── */}
           {!loading && active === 'team' && (() => {
-            const filteredTeam = teamMembers.filter(m => {
-              const q = teamSearch.toLowerCase()
-              const matchQ = !q || m.name.toLowerCase().includes(q) || m.mobile.includes(q) || m.email.toLowerCase().includes(q) || m.city.toLowerCase().includes(q)
-              const matchTab = teamTabFilter === 'all' || (teamTabFilter === 'active' ? m.status === 'active' : teamTabFilter === 'inactive' ? m.status === 'inactive' : m.role === teamTabFilter)
-              return matchQ && matchTab
+            const EXECUTOR_ROLES = ['TC', 'BD', 'Field Agent', 'Support', 'Trainer', 'Other']
+            const isExecutorRole = (role) => role === 'Executor' || EXECUTOR_ROLES.includes(role)
+
+            const segmentFilterTabs = [
+              { key: 'all', label: 'All' },
+              { key: 'active', label: 'Active' },
+              { key: 'inactive', label: 'Inactive' },
+            ]
+            const teamRoleFilterTabs = [
+              { key: 'all', label: 'All' },
+              { key: 'active', label: 'Active' },
+              { key: 'inactive', label: 'Inactive' },
+              { key: 'TC', label: 'TC' },
+              { key: 'BD', label: 'BD' },
+              { key: 'Field Agent', label: 'Field Agent' },
+              { key: 'Support', label: 'Support' },
+              { key: 'Trainer', label: 'Trainer' },
+              { key: 'Other', label: 'Other' },
+            ]
+            const filterTabKeys = teamSegment === 'team' ? teamRoleFilterTabs : segmentFilterTabs
+
+            const filteredTeam = teamMembers.filter((m) => {
+              const q = teamSearch.toLowerCase().trim()
+              const matchQ =
+                !q ||
+                (m.name || '').toLowerCase().includes(q) ||
+                String(m.mobile || '').includes(q) ||
+                String(m.email || '').toLowerCase().includes(q) ||
+                String(m.city || '').toLowerCase().includes(q) ||
+                String(m.role || '').toLowerCase().includes(q) ||
+                String(m.designation || '').toLowerCase().includes(q) ||
+                String(m.department || '').toLowerCase().includes(q)
+
+              let matchSeg = true
+              if (teamSegment === 'director') matchSeg = m.role === 'Director'
+              else if (teamSegment === 'manager') matchSeg = m.role === 'Manager'
+              else if (teamSegment === 'executor') matchSeg = isExecutorRole(m.role)
+              else matchSeg = true
+
+              let matchTab = true
+              if (teamSegment === 'team') {
+                if (teamTabFilter === 'all') matchTab = true
+                else if (teamTabFilter === 'active') matchTab = m.status === 'active'
+                else if (teamTabFilter === 'inactive') matchTab = m.status === 'inactive'
+                else matchTab = m.role === teamTabFilter
+              } else {
+                if (teamTabFilter === 'all') matchTab = true
+                else if (teamTabFilter === 'active') matchTab = m.status === 'active'
+                else if (teamTabFilter === 'inactive') matchTab = m.status === 'inactive'
+                else matchTab = false
+              }
+              return matchQ && matchSeg && matchTab
             })
 
             const roleColors = {
+              Director: 'bg-rose-100 text-rose-700 border-rose-200',
+              Manager: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+              Executor: 'bg-indigo-100 text-indigo-700 border-indigo-200',
               TC: 'bg-orange-100 text-orange-700 border-orange-200',
               BD: 'bg-violet-100 text-violet-700 border-violet-200',
-              Support: 'bg-blue-100 text-blue-700 border-blue-200',
-              Manager: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-              Trainer: 'bg-cyan-100 text-cyan-700 border-cyan-200',
               'Field Agent': 'bg-amber-100 text-amber-700 border-amber-200',
+              Support: 'bg-blue-100 text-blue-700 border-blue-200',
+              Trainer: 'bg-cyan-100 text-cyan-700 border-cyan-200',
               Other: 'bg-slate-100 text-slate-600 border-slate-200',
             }
 
-            const saveTeamMember = () => {
-              if (!teamForm.name.trim()) return alert('Name is required')
-              if (teamModal.mode === 'add') {
-                setTeamMembers(prev => [...prev, { ...teamForm, id: Date.now().toString() }])
-              } else {
-                setTeamMembers(prev => prev.map(m => m.id === teamModal.item.id ? { ...m, ...teamForm } : m))
+            function getReportingName(id) {
+              const m = teamMembers.find((x) => x.id === id)
+              return m ? m.name : '—'
+            }
+
+            function getDirectReports(managerId) {
+              return teamMembers.filter((m) => m.reportingTo === managerId)
+            }
+
+            function getMemberAvatar(m, sizeClass) {
+              const sc = sizeClass || 'w-9 h-9 text-xs'
+              if (m.imageUrl) {
+                return <img src={m.imageUrl} alt="" className={`${sc} rounded-full object-cover border border-slate-200 flex-shrink-0`} />
               }
-              setTeamModal({ open: false, mode: 'add', item: null })
+              return (
+                <div
+                  className={`${sc} rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 border border-orange-200/60`}
+                  style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}
+                >
+                  {(m.name || '?').slice(0, 2).toUpperCase()}
+                </div>
+              )
             }
 
-            const deleteTeamMember = (id) => {
+            const inFiltered = (id) => filteredTeam.some((f) => f.id === id)
+            const childrenOf = (id) => teamMembers.filter((x) => x.reportingTo === id)
+            const shouldShowNode = (m) => {
+              if (inFiltered(m.id)) return true
+              return childrenOf(m.id).some(shouldShowNode)
+            }
+
+            const saveTeamMember = async () => {
+              if (!teamForm.name.trim()) return alert('Name is required')
+              const mode = teamModal.mode
+              setSavingMisc(true)
+              try {
+                const body = { ...teamForm }
+                delete body.id
+                delete body.createdAt
+                delete body.updatedAt
+                let created = null
+                if (mode === 'add') {
+                  const res = await api('/api/business/team-members', { token, method: 'POST', body })
+                  created = res?.member ?? null
+                } else {
+                  await api(`/api/business/team-members/${teamModal.item.id}`, { token, method: 'PATCH', body })
+                }
+                await loadTeam()
+                if (created?.id) {
+                  setTeamMembers((prev) => (prev.some((x) => x.id === created.id) ? prev : [...prev, created]))
+                }
+                setTeamModal({ open: false, mode: 'add', item: null })
+              } catch (e) {
+                alert(e.message || 'Save failed')
+              } finally {
+                setSavingMisc(false)
+              }
+            }
+
+            const deleteTeamMember = async (id) => {
               if (!window.confirm('Delete this team member?')) return
-              setTeamMembers(prev => prev.filter(m => m.id !== id))
+              setTcActionMenu(null)
+              try {
+                await api(`/api/business/team-members/${id}`, { token, method: 'DELETE' })
+                await loadTeam()
+              } catch (e) {
+                alert(e.message || 'Delete failed')
+              }
             }
 
-            const activeCount = teamMembers.filter(m => m.status === 'active').length
-            const inactiveCount = teamMembers.filter(m => m.status === 'inactive').length
+            const activeCount = teamMembers.filter((m) => m.status === 'active').length
+            const inactiveCount = teamMembers.filter((m) => m.status === 'inactive').length
+            const uniqueRoles = [...new Set(teamMembers.map((m) => m.role))].length
+            const reportingOptions = teamMembers.filter((x) => x.role === 'Director' || x.role === 'Manager')
+
+            const roleBorderL = (role) => {
+              const map = {
+                Director: 'border-l-rose-500',
+                Manager: 'border-l-emerald-500',
+                Executor: 'border-l-indigo-500',
+                TC: 'border-l-orange-500',
+                BD: 'border-l-violet-500',
+                'Field Agent': 'border-l-amber-500',
+                Support: 'border-l-blue-500',
+                Trainer: 'border-l-cyan-500',
+                Other: 'border-l-slate-400',
+              }
+              return map[role] || 'border-l-slate-400'
+            }
+
+            const teamActionBtn = (m) => (
+              <button
+                type="button"
+                data-menu
+                onClick={(e) => openMenu(e, 'team', m.id, setTcActionMenu, setTcMenuPos)}
+                className="inline-flex items-center justify-center rounded-lg border border-transparent p-2 text-slate-600 hover:border-slate-200 hover:bg-slate-50 transition-colors"
+              >
+                <Settings2 size={17} strokeWidth={2} aria-hidden />
+              </button>
+            )
+
+            const directorsForTree = teamMembers.filter((m) => m.role === 'Director' && shouldShowNode(m))
+            const managersUnder = (dirId) =>
+              teamMembers.filter((m) => m.reportingTo === dirId && m.role === 'Manager' && shouldShowNode(m))
+            const executorsUnder = (mgrId) =>
+              teamMembers.filter(
+                (m) =>
+                  m.reportingTo === mgrId &&
+                  !['Director', 'Manager'].includes(m.role) &&
+                  shouldShowNode(m)
+              )
+
+            const deptGroupsBase = TEAM_DEPARTMENTS.map((d) => ({
+              dept: d,
+              members: filteredTeam.filter((m) => m.department === d),
+            })).filter((g) => g.members.length > 0)
+            const otherDeptMembers = filteredTeam.filter((m) => !TEAM_DEPARTMENTS.includes(m.department))
+            const deptGroups =
+              otherDeptMembers.length > 0
+                ? [...deptGroupsBase, { dept: 'Other', members: otherDeptMembers }]
+                : deptGroupsBase
+
+            const orphans = filteredTeam.filter(
+              (m) =>
+                !['Director', 'Manager'].includes(m.role) &&
+                !teamMembers.some((x) => x.id === m.reportingTo)
+            )
 
             return (
               <div className="space-y-5">
-                {/* Header */}
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="text-xl font-semibold text-neutral-950">Team</h2>
                     <p className="text-sm text-neutral-500 mt-0.5">{teamMembers.length} total members</p>
                   </div>
-                  <button type="button"
-                    onClick={() => { setTeamForm(BLANK_TEAM_MEMBER); setTeamModal({ open: true, mode: 'add', item: null }) }}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTeamForm({ ...BLANK_TEAM_MEMBER })
+                      setTeamModal({ open: true, mode: 'add', item: null })
+                    }}
                     className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm"
-                    style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
+                    style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}
+                  >
                     <Plus size={16} /> Add Member
                   </button>
                 </div>
 
-                {/* Stats */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
-                    { label: 'Total', value: teamMembers.length, cls: 'text-slate-700 bg-slate-50 border-slate-200' },
+                    { label: 'Total Members', value: teamMembers.length, cls: 'text-slate-700 bg-slate-50 border-slate-200' },
                     { label: 'Active', value: activeCount, cls: 'text-emerald-700 bg-emerald-50 border-emerald-100' },
                     { label: 'Inactive', value: inactiveCount, cls: 'text-red-600 bg-red-50 border-red-100' },
-                    { label: 'Roles', value: [...new Set(teamMembers.map(m => m.role))].length, cls: 'text-violet-700 bg-violet-50 border-violet-100' },
-                  ].map(s => (
-                    <div key={s.label} className={`rounded-xl border p-4 ${s.cls}`}>
-                      <p className="text-xs font-semibold uppercase tracking-wide opacity-70">{s.label}</p>
-                      <p className="text-3xl font-black mt-1">{s.value}</p>
+                    { label: 'Unique Roles', value: uniqueRoles, cls: 'text-violet-700 bg-violet-50 border-violet-100' },
+                  ].map((s) => (
+                    <div key={s.label} className={`rounded-xl border bg-white p-4 shadow-sm ${s.cls}`}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{s.label}</p>
+                      <p className="text-2xl sm:text-3xl font-black mt-1 tabular-nums">{s.value}</p>
                     </div>
                   ))}
                 </div>
 
-                {/* Filter + Search bar */}
-                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                  <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-100">
-                    <div className="relative flex-1 min-w-[180px]">
-                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input type="text" placeholder="Search name, mobile, city…" value={teamSearch}
-                        onChange={e => setTeamSearch(e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:border-orange-400" />
+                {teamLoading && (
+                  <div className="text-center py-4 text-sm text-slate-400">Loading team…</div>
+                )}
+
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-x-auto overflow-y-visible">
+                  <div className="flex flex-col gap-3 px-4 py-3 border-b border-slate-100 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <div className="relative flex-1 min-w-[200px]">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search name, mobile, city, role…"
+                        value={teamSearch}
+                        onChange={(e) => setTeamSearch(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                      />
                     </div>
-                    <p className="text-xs text-slate-400 ml-auto">{filteredTeam.length} results</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {[
+                        { id: 'list', label: '\u{1F4CB} List' },
+                        { id: 'hierarchy', label: '\u{1F333} Hierarchy' },
+                        { id: 'department', label: '\u{1F3E2} Department' },
+                      ].map((v) => (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={() => setTeamView(v.id)}
+                          className={`rounded-lg px-3 py-2 text-xs font-semibold border transition-colors ${
+                            teamView === v.id
+                              ? 'text-white border-transparent shadow-sm'
+                              : 'border-slate-200 text-neutral-600 bg-white hover:bg-slate-50'
+                          }`}
+                          style={teamView === v.id ? { background: 'linear-gradient(135deg,#FF7A00,#FFB000)' } : undefined}
+                        >
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  {/* Role/Status tabs */}
-                  <div className="flex flex-wrap gap-0.5 px-4 pt-2 pb-0 border-b border-slate-100">
+                  <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500 shrink-0">Group</span>
                     {[
-                      { key: 'all', label: 'All' },
-                      { key: 'active', label: 'Active' },
-                      { key: 'inactive', label: 'Inactive' },
-                      ...TEAM_ROLES.map(r => ({ key: r, label: r })),
-                    ].map(t => (
-                      <button key={t.key} type="button"
+                      { id: 'team', label: 'Team' },
+                      { id: 'director', label: 'Directors' },
+                      { id: 'manager', label: 'Managers' },
+                      { id: 'executor', label: 'Executors' },
+                    ].map((seg) => (
+                      <button
+                        key={seg.id}
+                        type="button"
+                        onClick={() => {
+                          setTeamSegment(seg.id)
+                          setTeamTabFilter('all')
+                        }}
+                        className={`rounded-lg px-3 py-2 text-xs font-bold border transition-colors ${
+                          teamSegment === seg.id
+                            ? 'text-white border-transparent shadow-sm'
+                            : 'border-slate-200 text-neutral-800 bg-white hover:bg-slate-100'
+                        }`}
+                        style={teamSegment === seg.id ? { background: 'linear-gradient(135deg,#FF7A00,#FFB000)' } : undefined}
+                      >
+                        {seg.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap gap-0.5 px-4 pt-2 pb-0 border-b border-slate-100">
+                    {filterTabKeys.map((t) => (
+                      <button
+                        key={t.key}
+                        type="button"
                         onClick={() => setTeamTabFilter(t.key)}
                         className={`px-3 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                          teamTabFilter === t.key ? 'border-orange-500 text-orange-600' : 'border-transparent text-neutral-500 hover:text-neutral-800'
-                        }`}>
+                          teamTabFilter === t.key
+                            ? 'border-orange-500 text-orange-600'
+                            : 'border-transparent text-neutral-500 hover:text-neutral-800'
+                        }`}
+                      >
                         {t.label}
                       </button>
                     ))}
                   </div>
 
-                  {/* Table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[700px] border-collapse">
-                      <thead className="bg-slate-50 border-b border-slate-200">
-                        <tr>
-                          {['#', 'Member', 'Role', 'Mobile', 'City', 'Joining Date', 'Status', 'Action'].map(h => (
-                            <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600 whitespace-nowrap">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {filteredTeam.length === 0 ? (
-                          <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">No team members found.</td></tr>
-                        ) : filteredTeam.map((m, idx) => (
-                          <tr key={m.id} className="hover:bg-orange-50/20 transition-colors align-middle">
-                            <td className="px-3 py-3 text-xs text-slate-400 tabular-nums">{idx + 1}</td>
-                            <td className="px-3 py-3">
-                              <div className="flex items-center gap-2.5">
-                                {m.imageUrl
-                                  ? <img src={m.imageUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-slate-200 flex-shrink-0" />
-                                  : <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                                      style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
-                                      {m.name.slice(0, 2).toUpperCase()}
+                  <div className="px-4 py-2 border-b border-slate-50">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      {filteredTeam.length} result{filteredTeam.length === 1 ? '' : 's'}
+                    </p>
+                  </div>
+
+                  {teamView === 'list' && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[900px] border-collapse">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr>
+                            {['#', 'Member', 'Role', 'Reporting To', 'Mobile', 'City', 'Joining Date', 'Status', 'Action'].map((h) => (
+                              <th
+                                key={h}
+                                className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600 whitespace-nowrap"
+                              >
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {filteredTeam.length === 0 ? (
+                            <tr>
+                              <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">
+                                No team members found.
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredTeam.map((m, idx) => (
+                              <tr key={m.id} className="hover:bg-orange-50/20 transition-colors align-middle">
+                                <td className="px-3 py-3 text-xs text-slate-500 tabular-nums">{idx + 1}</td>
+                                <td className="px-3 py-3 min-w-0">
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    {getMemberAvatar(m, 'w-9 h-9 text-xs')}
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold text-neutral-900 truncate">{m.name}</p>
+                                      <p className="text-xs text-slate-500 truncate">{m.email || '—'}</p>
                                     </div>
-                                }
-                                <div>
-                                  <p className="text-sm font-semibold text-neutral-900">{m.name}</p>
-                                  <p className="text-[11px] text-slate-400 truncate max-w-[140px]">{m.email || '—'}</p>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-3">
+                                  <span
+                                    className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                                      roleColors[m.role] || roleColors.Other
+                                    }`}
+                                  >
+                                    {m.role}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-3 text-sm text-slate-700 max-w-[140px] truncate" title={getReportingName(m.reportingTo)}>
+                                  {getReportingName(m.reportingTo)}
+                                </td>
+                                <td className="px-3 py-3 text-sm text-slate-700 tabular-nums whitespace-nowrap">{m.mobile || '—'}</td>
+                                <td className="px-3 py-3 text-sm text-slate-600 max-w-[120px] truncate">{m.city || '—'}</td>
+                                <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
+                                  {m.joiningDate
+                                    ? new Date(m.joiningDate).toLocaleDateString('en-IN', {
+                                        day: '2-digit',
+                                        month: 'short',
+                                        year: 'numeric',
+                                      })
+                                    : '—'}
+                                </td>
+                                <td className="px-3 py-3">
+                                  <span
+                                    className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold capitalize ${
+                                      m.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                                    }`}
+                                  >
+                                    {m.status}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-3 text-center">{teamActionBtn(m)}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {teamView === 'hierarchy' && (
+                    <div className="p-4 space-y-6">
+                      {filteredTeam.length === 0 ? (
+                        <p className="text-sm text-center text-slate-400 py-8">No team members match this filter.</p>
+                      ) : (
+                        <>
+                          {directorsForTree.map((d) => {
+                          const mgrs = managersUnder(d.id)
+                          const dirReports = teamMembers.filter((x) => x.reportingTo === d.id && x.role === 'Manager')
+                          return (
+                            <div key={d.id} className="space-y-3">
+                              <div
+                                className="relative flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm border-l-4 border-l-orange-500"
+                              >
+                                <div className="flex items-start gap-3 min-w-0">
+                                  <div className="relative flex-shrink-0">
+                                    {getMemberAvatar(d, 'w-14 h-14 text-sm')}
+                                    <span
+                                      className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white ${
+                                        d.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'
+                                      }`}
+                                    />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-lg font-bold text-neutral-950 truncate">{d.name}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">{tcDisplay(d.designation)}</p>
+                                    <span
+                                      className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                                        roleColors[d.role] || roleColors.Other
+                                      }`}
+                                    >
+                                      {d.role}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 justify-end">
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-700">
+                                    <Users size={12} /> {dirReports.length} Reports
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-700">
+                                    <Briefcase size={12} /> {d.leadsCount ?? 0} Leads
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-700">
+                                    <Calendar size={12} /> {d.meetingsCount ?? 0} Meetings
+                                  </span>
+                                </div>
+                                <div className="w-full flex justify-end gap-1 pt-1">
+                                  <button
+                                    type="button"
+                                    className="rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50"
+                                    onClick={() => {
+                                      setTeamForm({ ...d })
+                                      setTeamModal({ open: true, mode: 'edit', item: d })
+                                    }}
+                                  >
+                                    <Pencil size={15} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50"
+                                    onClick={() => setTeamViewItem(d)}
+                                  >
+                                    <Eye size={15} />
+                                  </button>
                                 </div>
                               </div>
-                            </td>
-                            <td className="px-3 py-3">
-                              <span className={`inline-block rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${roleColors[m.role] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{m.role}</span>
-                            </td>
-                            <td className="px-3 py-3 text-sm text-slate-700 tabular-nums whitespace-nowrap">{m.mobile || '—'}</td>
-                            <td className="px-3 py-3 text-sm text-slate-600">{m.city || '—'}</td>
-                            <td className="px-3 py-3 text-[11px] text-slate-500 whitespace-nowrap">
-                              {m.joiningDate ? new Date(m.joiningDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                            </td>
-                            <td className="px-3 py-3">
-                              <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold capitalize ${
-                                m.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
-                              }`}>{m.status}</span>
-                            </td>
-                            <td className="px-3 py-3 text-center">
-                              <div className="relative inline-block">
-                                <button type="button"
-                                  data-menu
-                                  onClick={(e) => openMenu(e, 'team', m.id, setTcActionMenu, setTcMenuPos)}
-                                  className="inline-flex items-center justify-center rounded-lg border border-transparent p-1.5 text-slate-500 hover:border-slate-200 hover:bg-slate-50 transition-colors">
-                                  <Settings2 size={15} strokeWidth={2} />
-                                </button>
+
+                              {mgrs.length > 0 && (
+                                <div className="ml-6 sm:ml-8 border-l-2 border-dashed border-slate-200 pl-4 sm:pl-6 space-y-4">
+                                  {mgrs.map((mgr) => {
+                                    const execs = executorsUnder(mgr.id)
+                                    const teamSize = getDirectReports(mgr.id).length
+                                    const expanded = expandedManagers.has(mgr.id)
+                                    return (
+                                      <div key={mgr.id} className="space-y-2">
+                                        <div
+                                          className={`relative flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm border-l-[3px] ${roleBorderL('Manager')}`}
+                                        >
+                                          <div className="flex items-start gap-2.5 min-w-0">
+                                            <div className="relative flex-shrink-0">
+                                              {getMemberAvatar(mgr, 'w-11 h-11 text-xs')}
+                                              <span
+                                                className={`absolute bottom-0 right-0 h-2 w-2 rounded-full border-2 border-white ${
+                                                  mgr.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'
+                                                }`}
+                                              />
+                                            </div>
+                                            <div className="min-w-0">
+                                              <p className="text-sm font-semibold text-neutral-950 truncate">{mgr.name}</p>
+                                              <p className="text-xs text-slate-500">{tcDisplay(mgr.designation)}</p>
+                                              <span
+                                                className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                                                  roleColors[mgr.role] || roleColors.Other
+                                                }`}
+                                              >
+                                                {mgr.role}
+                                              </span>
+                                            </div>
+                                          </div>
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                                              <Users size={11} /> {teamSize} Team
+                                            </span>
+                                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                                              <Briefcase size={11} /> {mgr.leadsCount ?? 0} Leads
+                                            </span>
+                                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                                              <Calendar size={11} /> {mgr.meetingsCount ?? 0} Meetings
+                                            </span>
+                                            <button
+                                              type="button"
+                                              className="rounded-lg border border-slate-200 p-1 text-slate-600 hover:bg-slate-50"
+                                              onClick={() =>
+                                                setExpandedManagers((prev) => {
+                                                  const s = new Set(prev)
+                                                  if (s.has(mgr.id)) s.delete(mgr.id)
+                                                  else s.add(mgr.id)
+                                                  return s
+                                                })
+                                              }
+                                            >
+                                              {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                            </button>
+                                            {teamActionBtn(mgr)}
+                                            <button
+                                              type="button"
+                                              className="rounded-lg border border-slate-200 p-1 text-slate-600 hover:bg-slate-50"
+                                              onClick={() => {
+                                                setTeamForm({ ...mgr })
+                                                setTeamModal({ open: true, mode: 'edit', item: mgr })
+                                              }}
+                                            >
+                                              <Pencil size={14} />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="rounded-lg border border-slate-200 p-1 text-slate-600 hover:bg-slate-50"
+                                              onClick={() => setTeamViewItem(mgr)}
+                                            >
+                                              <Eye size={14} />
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {expanded && execs.length > 0 && (
+                                          <div className="ml-4 sm:ml-8 border-l-2 border-dashed border-slate-200 pl-4 space-y-2">
+                                            {execs.map((ex) => (
+                                              <div
+                                                key={ex.id}
+                                                className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm border-l-2 ${roleBorderL(ex.role)}`}
+                                              >
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                  <div className="relative flex-shrink-0">
+                                                    {getMemberAvatar(ex, 'w-9 h-9 text-[10px]')}
+                                                    <span
+                                                      className={`absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full border border-white ${
+                                                        ex.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'
+                                                      }`}
+                                                    />
+                                                  </div>
+                                                  <div className="min-w-0">
+                                                    <p className="text-sm font-semibold text-neutral-900 truncate">{ex.name}</p>
+                                                    <p className="text-[10px] text-slate-500 truncate">{tcDisplay(ex.designation)}</p>
+                                                    <span
+                                                      className={`mt-0.5 inline-flex rounded-full border px-1.5 py-px text-[9px] font-bold ${
+                                                        roleColors[ex.role] || roleColors.Other
+                                                      }`}
+                                                    >
+                                                      {ex.role}
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                  <span className="text-[10px] font-semibold text-slate-600">
+                                                    <Briefcase size={11} className="inline mr-0.5" />
+                                                    {ex.leadsCount ?? 0}
+                                                  </span>
+                                                  <span className="text-[10px] font-semibold text-slate-600">
+                                                    <Calendar size={11} className="inline mr-0.5" />
+                                                    {ex.meetingsCount ?? 0}
+                                                  </span>
+                                                  <button
+                                                    type="button"
+                                                    className="rounded border border-slate-200 p-1 text-slate-600 hover:bg-slate-50"
+                                                    onClick={() => {
+                                                      setTeamForm({ ...ex })
+                                                      setTeamModal({ open: true, mode: 'edit', item: ex })
+                                                    }}
+                                                  >
+                                                    <Pencil size={13} />
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    className="rounded border border-slate-200 p-1 text-slate-600 hover:bg-slate-50"
+                                                    onClick={() => setTeamViewItem(ex)}
+                                                  >
+                                                    <Eye size={13} />
+                                                  </button>
+                                                  {teamActionBtn(ex)}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )
+                          })}
+                          {orphans.length > 0 && (
+                            <div className="mt-4 border-t border-dashed border-slate-200 pt-4">
+                              <p className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-3">
+                                Unassigned Members
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {orphans.map((ex) => (
+                                  <div
+                                    key={ex.id}
+                                    className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm border-l-2 ${roleBorderL(ex.role)}`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <div className="relative flex-shrink-0">
+                                        {getMemberAvatar(ex, 'w-9 h-9 text-[10px]')}
+                                        <span
+                                          className={`absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full border border-white ${
+                                            ex.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'
+                                          }`}
+                                        />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-neutral-900 truncate">{ex.name}</p>
+                                        <p className="text-[10px] text-slate-500 truncate">{tcDisplay(ex.designation)}</p>
+                                        <span
+                                          className={`mt-0.5 inline-flex rounded-full border px-1.5 py-px text-[9px] font-bold ${
+                                            roleColors[ex.role] || roleColors.Other
+                                          }`}
+                                        >
+                                          {ex.role}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="text-[10px] font-semibold text-slate-600">
+                                        <Briefcase size={11} className="inline mr-0.5" />
+                                        {ex.leadsCount ?? 0}
+                                      </span>
+                                      <span className="text-[10px] font-semibold text-slate-600">
+                                        <Calendar size={11} className="inline mr-0.5" />
+                                        {ex.meetingsCount ?? 0}
+                                      </span>
+                                      {teamActionBtn(ex)}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {teamView === 'department' && (
+                    <div className="p-4 space-y-6">
+                      {deptGroups.length === 0 ? (
+                        <p className="text-sm text-center text-slate-400 py-8">No team members match this filter.</p>
+                      ) : (
+                        deptGroups.map((g) => (
+                          <div key={g.dept}>
+                            <div className="flex items-center gap-2 mb-3">
+                              <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-900">{g.dept}</h3>
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                                {g.members.length}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {g.members.map((m) => (
+                                <div
+                                  key={m.id}
+                                  className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:bg-orange-50/10 transition-colors"
+                                >
+                                  <div className="flex items-start gap-3">
+                                    {getMemberAvatar(m, 'w-11 h-11 text-xs')}
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm font-bold text-neutral-950 truncate">{m.name}</p>
+                                      <p className="text-xs text-slate-500 truncate">{tcDisplay(m.designation)}</p>
+                                      <div className="mt-2 flex flex-wrap gap-1">
+                                        <span
+                                          className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                                            roleColors[m.role] || roleColors.Other
+                                          }`}
+                                        >
+                                          {m.role}
+                                        </span>
+                                        <span
+                                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold capitalize ${
+                                            m.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                                          }`}
+                                        >
+                                          {m.status}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {teamActionBtn(m)}
+                                  </div>
+                                  <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-600 border-t border-slate-100 pt-3">
+                                    <span className="font-semibold tabular-nums">{m.mobile || '—'}</span>
+                                    <span className="truncate max-w-full">{m.city || '—'}</span>
+                                  </div>
+                                  <div className="mt-1 flex gap-3 text-[10px] font-semibold text-slate-600">
+                                    <span>
+                                      <Briefcase size={11} className="inline mr-0.5" />
+                                      {m.leadsCount ?? 0} leads
+                                    </span>
+                                    <span>
+                                      <Calendar size={11} className="inline mr-0.5" />
+                                      {m.meetingsCount ?? 0} meetings
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                {/* Add/Edit Modal */}
+                {tcActionMenu?.kind === 'team' &&
+                  typeof document !== 'undefined' &&
+                  createPortal(
+                    (() => {
+                      const m = teamMembers.find((x) => x.id === tcActionMenu.id)
+                      if (!m) return null
+                      return (
+                        <div
+                          data-menu
+                          role="menu"
+                          style={{
+                            position: 'fixed',
+                            top: tcMenuPos.top,
+                            left: tcMenuPos.left,
+                            zIndex: 10050,
+                            maxHeight: 'min(70vh, 320px)',
+                          }}
+                          className="w-[11.5rem] overflow-y-auto overflow-x-visible rounded-xl border border-slate-200 bg-white py-1 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.25)]"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className={tcDropdownItem}
+                            onClick={() => {
+                              setTcActionMenu(null)
+                              setTeamViewItem(m)
+                            }}
+                          >
+                            <Eye size={17} /> View
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className={tcDropdownItem}
+                            onClick={() => {
+                              setTcActionMenu(null)
+                              setTeamForm({ ...m })
+                              setTeamModal({ open: true, mode: 'edit', item: m })
+                            }}
+                          >
+                            <Pencil size={17} /> Edit
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className={`${tcDropdownItemDanger} border-t border-slate-100`}
+                            onClick={() => deleteTeamMember(m.id)}
+                          >
+                            <Trash2 size={17} /> Delete
+                          </button>
+                        </div>
+                      )
+                    })(),
+                    document.body
+                  )}
+
                 {teamModal.open && (
                   <div className={tcModalOverlay} onClick={() => setTeamModal({ open: false, mode: 'add', item: null })}>
-                    <div className="relative w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                    <div
+                      className="relative w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[90vh]"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <div className={tcModalHeader}>
                         <div>
                           <h2 className={tcModalTitle}>{teamModal.mode === 'add' ? 'Add Team Member' : 'Edit Team Member'}</h2>
                           <p className={tcModalSub}>Fill in the member details</p>
                         </div>
-                        <button type="button" onClick={() => setTeamModal({ open: false, mode: 'add', item: null })} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X size={16} /></button>
+                        <button
+                          type="button"
+                          onClick={() => setTeamModal({ open: false, mode: 'add', item: null })}
+                          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
                       <div className={tcModalBody}>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="col-span-2">
                             <label className={tcLabel}>Full Name *</label>
-                            <input className={tcInput} value={teamForm.name} onChange={e => setTeamForm(p => ({ ...p, name: e.target.value }))} placeholder="Enter full name" />
+                            <input
+                              className={tcInput}
+                              value={teamForm.name}
+                              onChange={(e) => setTeamForm((p) => ({ ...p, name: e.target.value }))}
+                              placeholder="Enter full name"
+                            />
                           </div>
                           <div>
                             <label className={tcLabel}>Mobile</label>
-                            <input className={tcInput} value={teamForm.mobile} onChange={e => setTeamForm(p => ({ ...p, mobile: e.target.value }))} placeholder="Mobile number" />
+                            <input
+                              className={tcInput}
+                              value={teamForm.mobile}
+                              onChange={(e) => setTeamForm((p) => ({ ...p, mobile: e.target.value }))}
+                              placeholder="Mobile number"
+                            />
                           </div>
                           <div>
                             <label className={tcLabel}>Email</label>
-                            <input className={tcInput} type="email" value={teamForm.email} onChange={e => setTeamForm(p => ({ ...p, email: e.target.value }))} placeholder="Email address" />
+                            <input
+                              className={tcInput}
+                              type="email"
+                              value={teamForm.email}
+                              onChange={(e) => setTeamForm((p) => ({ ...p, email: e.target.value }))}
+                              placeholder="Email address"
+                            />
                           </div>
                           <div className="col-span-2">
                             <label className={tcLabel}>Profile Photo</label>
-                            <div className="flex items-center gap-3">
-                              {teamForm.imageUrl
-                                ? <img src={teamForm.imageUrl} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-orange-200 flex-shrink-0" />
-                                : <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 border-2 border-orange-200"
-                                    style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
-                                    {teamForm.name ? teamForm.name.slice(0, 2).toUpperCase() : '?'}
-                                  </div>
-                              }
-                              <label className="flex-1 flex items-center gap-2 cursor-pointer rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 hover:border-orange-400 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-400 flex-shrink-0"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                                <span className="text-sm text-slate-500">{teamImgUploading ? 'Uploading…' : teamForm.imageUrl ? '✓ Photo uploaded' : 'Choose photo'}</span>
-                                <input type="file" accept="image/*" className="hidden" disabled={teamImgUploading}
-                                  onChange={e => {
+                            <div className="flex items-center gap-3 flex-wrap">
+                              {teamForm.imageUrl ? (
+                                <img
+                                  src={teamForm.imageUrl}
+                                  alt=""
+                                  className="w-10 h-10 rounded-full object-cover border-2 border-orange-200 flex-shrink-0"
+                                />
+                              ) : (
+                                <div
+                                  className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 border-2 border-orange-200"
+                                  style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}
+                                >
+                                  {teamForm.name ? teamForm.name.slice(0, 2).toUpperCase() : '?'}
+                                </div>
+                              )}
+                              <label className="flex-1 min-w-[140px] flex items-center gap-2 cursor-pointer rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 hover:border-orange-400 transition-colors">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="13"
+                                  height="13"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  className="text-slate-400 flex-shrink-0"
+                                >
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                  <polyline points="17 8 12 3 7 8" />
+                                  <line x1="12" y1="3" x2="12" y2="15" />
+                                </svg>
+                                <span className="text-sm text-slate-500">
+                                  {teamImgUploading ? 'Uploading…' : teamForm.imageUrl ? '✓ Photo uploaded' : 'Choose photo'}
+                                </span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  disabled={teamImgUploading}
+                                  onChange={(e) => {
                                     const file = e.target.files?.[0]
                                     if (!file) return
                                     setTeamImgUploading(true)
                                     const reader = new FileReader()
-                                    reader.onload = ev => { setTeamForm(p => ({ ...p, imageUrl: ev.target.result })); setTeamImgUploading(false) }
+                                    reader.onload = (ev) => {
+                                      const img = new Image()
+                                      img.onload = () => {
+                                        const canvas = document.createElement('canvas')
+                                        const MAX = 200
+                                        const ratio = Math.min(MAX / img.width, MAX / img.height, 1)
+                                        canvas.width = Math.round(img.width * ratio)
+                                        canvas.height = Math.round(img.height * ratio)
+                                        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+                                        setTeamForm((p) => ({ ...p, imageUrl: canvas.toDataURL('image/jpeg', 0.7) }))
+                                        setTeamImgUploading(false)
+                                      }
+                                      img.src = ev.target?.result || ''
+                                    }
                                     reader.readAsDataURL(file)
-                                  }} />
+                                  }}
+                                />
                               </label>
                               {teamForm.imageUrl && (
-                                <button type="button" onClick={() => setTeamForm(p => ({ ...p, imageUrl: '' }))}
-                                  className="text-xs text-red-500 hover:text-red-700 whitespace-nowrap">Remove</button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTeamForm((p) => ({ ...p, imageUrl: '' }))}
+                                  className="text-xs text-red-500 hover:text-red-700 whitespace-nowrap"
+                                >
+                                  Remove
+                                </button>
                               )}
                             </div>
                           </div>
                           <div>
                             <label className={tcLabel}>Role</label>
-                            <select className={tcSelect} value={teamForm.role} onChange={e => setTeamForm(p => ({ ...p, role: e.target.value }))}>
-                              {TEAM_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                            <select
+                              className={tcSelect}
+                              value={teamForm.role}
+                              onChange={(e) => setTeamForm((p) => ({ ...p, role: e.target.value }))}
+                            >
+                              {TEAM_ROLES.map((r) => (
+                                <option key={r} value={r}>
+                                  {r}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Department</label>
+                            <select
+                              className={tcSelect}
+                              value={teamForm.department}
+                              onChange={(e) => setTeamForm((p) => ({ ...p, department: e.target.value }))}
+                            >
+                              {TEAM_DEPARTMENTS.map((d) => (
+                                <option key={d} value={d}>
+                                  {d}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="col-span-2">
+                            <label className={tcLabel}>Reporting To</label>
+                            <select
+                              className={tcSelect}
+                              value={teamForm.reportingTo || ''}
+                              onChange={(e) => setTeamForm((p) => ({ ...p, reportingTo: e.target.value }))}
+                            >
+                              <option value="">— None (Top Level) —</option>
+                              {reportingOptions
+                                .filter((x) => !teamModal.item || x.id !== teamModal.item.id)
+                                .map((x) => (
+                                  <option key={x.id} value={x.id}>
+                                    {x.name} ({x.role})
+                                  </option>
+                                ))}
                             </select>
                           </div>
                           <div>
                             <label className={tcLabel}>Status</label>
-                            <select className={tcSelect} value={teamForm.status} onChange={e => setTeamForm(p => ({ ...p, status: e.target.value }))}>
+                            <select
+                              className={tcSelect}
+                              value={teamForm.status}
+                              onChange={(e) => setTeamForm((p) => ({ ...p, status: e.target.value }))}
+                            >
                               <option value="active">Active</option>
                               <option value="inactive">Inactive</option>
                             </select>
                           </div>
                           <div>
+                            <label className={tcLabel}>Employee ID</label>
+                            <input
+                              className={tcInput}
+                              value={teamForm.employeeId}
+                              onChange={(e) => setTeamForm((p) => ({ ...p, employeeId: e.target.value }))}
+                              placeholder="EMP000"
+                            />
+                          </div>
+                          <div>
+                            <label className={tcLabel}>Designation</label>
+                            <input
+                              className={tcInput}
+                              value={teamForm.designation}
+                              onChange={(e) => setTeamForm((p) => ({ ...p, designation: e.target.value }))}
+                              placeholder="Title"
+                            />
+                          </div>
+                          <div>
                             <label className={tcLabel}>City</label>
-                            <input className={tcInput} value={teamForm.city} onChange={e => setTeamForm(p => ({ ...p, city: e.target.value }))} placeholder="City" />
+                            <input
+                              className={tcInput}
+                              value={teamForm.city}
+                              onChange={(e) => setTeamForm((p) => ({ ...p, city: e.target.value }))}
+                              placeholder="City"
+                            />
                           </div>
                           <div>
                             <label className={tcLabel}>Joining Date</label>
-                            <input type="date" className={tcInput} value={teamForm.joiningDate} onChange={e => setTeamForm(p => ({ ...p, joiningDate: e.target.value }))} />
+                            <input
+                              type="date"
+                              className={tcInput}
+                              value={teamForm.joiningDate}
+                              onChange={(e) => setTeamForm((p) => ({ ...p, joiningDate: e.target.value }))}
+                            />
                           </div>
                           <div className="col-span-2">
                             <label className={tcLabel}>Address</label>
-                            <input className={tcInput} value={teamForm.address} onChange={e => setTeamForm(p => ({ ...p, address: e.target.value }))} placeholder="Full address" />
+                            <input
+                              className={tcInput}
+                              value={teamForm.address}
+                              onChange={(e) => setTeamForm((p) => ({ ...p, address: e.target.value }))}
+                              placeholder="Full address"
+                            />
                           </div>
                           <div className="col-span-2">
                             <label className={tcLabel}>Notes</label>
-                            <textarea className={tcTextarea} rows={2} value={teamForm.notes} onChange={e => setTeamForm(p => ({ ...p, notes: e.target.value }))} placeholder="Any notes about this member…" />
+                            <textarea
+                              className={tcTextarea}
+                              rows={3}
+                              value={teamForm.notes}
+                              onChange={(e) => setTeamForm((p) => ({ ...p, notes: e.target.value }))}
+                              placeholder="Any notes about this member…"
+                            />
                           </div>
                         </div>
                       </div>
                       <div className={tcModalFooter}>
-                        <button type="button" className={tcBtnGhost} onClick={() => setTeamModal({ open: false, mode: 'add', item: null })}>Cancel</button>
-                        <button type="button" className={tcBtnPrimary} style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }} onClick={saveTeamMember}>
-                          {teamModal.mode === 'add' ? 'Add Member' : 'Save Changes'}
+                        <button type="button" className={tcBtnGhost} onClick={() => setTeamModal({ open: false, mode: 'add', item: null })}>
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className={tcBtnPrimary}
+                          style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}
+                          disabled={savingMisc}
+                          onClick={saveTeamMember}
+                        >
+                          {savingMisc ? 'Saving…' : teamModal.mode === 'add' ? 'Add Member' : 'Save Changes'}
                         </button>
                       </div>
                     </div>
@@ -2680,22 +3524,43 @@ export default function TCDashboard() {
       {/* Team View Modal */}
       {teamViewItem && (
         <div className={tcModalOverlay} onClick={() => setTeamViewItem(null)}>
-          <div className="relative w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+          <div
+            className="relative w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className={tcModalHeader}>
               <div className="flex items-center gap-3">
-                {teamViewItem.imageUrl
-                  ? <img src={teamViewItem.imageUrl} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-orange-200 flex-shrink-0" />
-                  : <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-                      style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}>
-                      {teamViewItem.name.slice(0, 2).toUpperCase()}
-                    </div>
-                }
+                {teamViewItem.imageUrl ? (
+                  <img
+                    src={teamViewItem.imageUrl}
+                    alt=""
+                    className="w-12 h-12 rounded-full object-cover border-2 border-orange-200 flex-shrink-0"
+                  />
+                ) : (
+                  <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg,#FF7A00,#FFB000)' }}
+                  >
+                    {teamViewItem.name.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
                 <div>
                   <h2 className={tcModalTitle}>{teamViewItem.name}</h2>
-                  <p className={tcModalSub}>{teamViewItem.role} • <span className={`capitalize font-semibold ${ teamViewItem.status === 'active' ? 'text-emerald-600' : 'text-slate-500'}`}>{teamViewItem.status}</span></p>
+                  <p className={tcModalSub}>
+                    {teamViewItem.role} •{' '}
+                    <span
+                      className={`capitalize font-semibold ${
+                        teamViewItem.status === 'active' ? 'text-emerald-600' : 'text-slate-500'
+                      }`}
+                    >
+                      {teamViewItem.status}
+                    </span>
+                  </p>
                 </div>
               </div>
-              <button type="button" onClick={() => setTeamViewItem(null)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><X size={16} /></button>
+              <button type="button" onClick={() => setTeamViewItem(null)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100">
+                <X size={16} />
+              </button>
             </div>
             <div className={tcModalBody}>
               <div className="grid grid-cols-2 gap-2.5">
@@ -2716,8 +3581,52 @@ export default function TCDashboard() {
                 <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
                   <Briefcase size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
                   <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Department</p>
+                    <p className="text-sm font-semibold text-neutral-900">{tcDisplay(teamViewItem.department)}</p>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <UserCheck size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Reporting To</p>
+                    <p className="text-sm font-semibold text-neutral-900">
+                      {teamMembers.find((x) => x.id === teamViewItem.reportingTo)?.name || '—'}
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <Briefcase size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Employee ID</p>
+                    <p className="text-sm font-semibold text-neutral-900">{tcDisplay(teamViewItem.employeeId)}</p>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <Briefcase size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Designation</p>
+                    <p className="text-sm font-semibold text-neutral-900">{tcDisplay(teamViewItem.designation)}</p>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <Briefcase size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Role</p>
                     <p className="text-sm font-semibold text-orange-600">{tcDisplay(teamViewItem.role)}</p>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <Briefcase size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Leads Count</p>
+                    <p className="text-sm font-semibold text-neutral-900 tabular-nums">{tcDisplay(teamViewItem.leadsCount)}</p>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
+                  <Calendar size={13} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Meetings Count</p>
+                    <p className="text-sm font-semibold text-neutral-900 tabular-nums">{tcDisplay(teamViewItem.meetingsCount)}</p>
                   </div>
                 </div>
                 <div className="bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-2">
@@ -2739,30 +3648,45 @@ export default function TCDashboard() {
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Joining Date</p>
                     <p className="text-sm font-semibold text-neutral-900">
-                      {teamViewItem.joiningDate ? new Date(teamViewItem.joiningDate).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : '—'}
+                      {teamViewItem.joiningDate
+                        ? new Date(teamViewItem.joiningDate).toLocaleDateString('en-IN', { dateStyle: 'medium' })
+                        : '—'}
                     </p>
                   </div>
                 </div>
                 <div className="bg-slate-50 rounded-lg px-3 py-2">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-0.5">Status</p>
-                  <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold capitalize ${
-                    teamViewItem.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
-                  }`}>{teamViewItem.status}</span>
+                  <span
+                    className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold capitalize ${
+                      teamViewItem.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {teamViewItem.status}
+                  </span>
                 </div>
               </div>
               {teamViewItem.notes && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 mb-0.5">Notes</p>
                   <p className="text-sm text-neutral-900 whitespace-pre-wrap">{teamViewItem.notes}</p>
                 </div>
               )}
             </div>
             <div className={tcModalFooter}>
-              <button type="button" className={tcBtnGhost}
-                onClick={() => { setTeamViewItem(null); setTeamForm({ ...teamViewItem }); setTeamModal({ open: true, mode: 'edit', item: teamViewItem }) }}>
+              <button
+                type="button"
+                className={tcBtnGhost}
+                onClick={() => {
+                  setTeamViewItem(null)
+                  setTeamForm({ ...teamViewItem })
+                  setTeamModal({ open: true, mode: 'edit', item: teamViewItem })
+                }}
+              >
                 Edit
               </button>
-              <button type="button" className={tcBtnGhost} onClick={() => setTeamViewItem(null)}>Close</button>
+              <button type="button" className={tcBtnGhost} onClick={() => setTeamViewItem(null)}>
+                Close
+              </button>
             </div>
           </div>
         </div>
@@ -3234,6 +4158,17 @@ export default function TCDashboard() {
                       </label>
                     )}
                   </div>
+                  {/* Telegram alert indicator */}
+                  <div className={`flex items-center gap-2 pt-2 border-t border-blue-200 text-xs font-medium ${
+                    tgBotToken && tgChatId ? 'text-emerald-600' : 'text-slate-400'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      tgBotToken && tgChatId ? 'bg-emerald-500' : 'bg-slate-300'
+                    }`} />
+                    {tgBotToken && tgChatId
+                      ? '✅ Telegram alert will also be sent'
+                      : '⚠️ Telegram not configured — no alert will be sent'}
+                  </div>
                 </div>
               )}
               <div>
@@ -3654,8 +4589,8 @@ export default function TCDashboard() {
           </div>
         </div>
       )}
-      {/* Global Action Dropdown Portal — renders outside any overflow:hidden */}
-      {tcActionMenu && (
+      {/* Global Action Dropdown Portal — renders outside any overflow:hidden (team menu renders inside Team section) */}
+      {tcActionMenu && tcActionMenu.kind === 'lead' && (
         <div
           className={tcDropdown}
           style={{ top: tcMenuPos.top, left: tcMenuPos.left }}
@@ -3681,30 +4616,6 @@ export default function TCDashboard() {
                     setTcActionMenu(null)
                     try { await api(`/api/business/leads/${l.id}`, { token, method: 'DELETE' }); await load() }
                     catch(e) { alert(e.message || 'Failed') }
-                  }}>
-                  <Trash2 size={15} /> Delete
-                </button>
-              </>
-            )
-          })()}
-          {tcActionMenu.kind === 'team' && (() => {
-            const m = teamMembers.find(x => x.id === tcActionMenu.id)
-            if (!m) return null
-            return (
-              <>
-                <button type="button" className={tcDropdownItem}
-                  onClick={() => { setTcActionMenu(null); setTeamViewItem(m) }}>
-                  <Eye size={15} /> View
-                </button>
-                <button type="button" className={tcDropdownItem}
-                  onClick={() => { setTcActionMenu(null); setTeamForm({ ...m }); setTeamModal({ open: true, mode: 'edit', item: m }) }}>
-                  <Pencil size={15} /> Edit
-                </button>
-                <button type="button" className={tcDropdownItemDanger}
-                  onClick={() => {
-                    setTcActionMenu(null)
-                    if (!window.confirm('Delete this team member?')) return
-                    setTeamMembers(prev => prev.filter(x => x.id !== m.id))
                   }}>
                   <Trash2 size={15} /> Delete
                 </button>
