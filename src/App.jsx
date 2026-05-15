@@ -10,7 +10,8 @@ import SubClientLogin from './pages/client/SubClientLogin'
 import BDDashboard from './pages/bd/Dashboard'
 import BDLogin from './pages/bd/Login'
 import TCDashboard from './pages/tc/Dashboard'
-import { TOKEN_SUPERADMIN, TOKEN_ADMIN, TOKEN_CLIENT, TOKEN_BD, TOKEN_TC, TOKEN_SUBCLIENT } from './lib/api'
+import PMDashboard from './pages/pm/Dashboard'
+import { TOKEN_SUPERADMIN, TOKEN_ADMIN, TOKEN_CLIENT, TOKEN_BD, TOKEN_TC, TOKEN_SUBCLIENT, TOKEN_PM } from './lib/api'
 
 function tcToken() {
   const t = localStorage.getItem(TOKEN_TC)
@@ -81,6 +82,13 @@ function App() {
         <Route path="/tc/dashboard" element={
           <Guard customCheck={tcToken} fallback="/client/login">
             <TCDashboard />
+          </Guard>
+        } />
+
+        {/* Ailocity PM */}
+        <Route path="/pm/dashboard" element={
+          <Guard tokenKey={TOKEN_PM} fallback="/client/login">
+            <PMDashboard />
           </Guard>
         } />
       </Routes>

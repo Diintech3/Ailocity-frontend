@@ -25,7 +25,7 @@ import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-import { api, TOKEN_CLIENT, TOKEN_SUBCLIENT, TOKEN_BD, TOKEN_TC } from '../../lib/api'
+import { api, TOKEN_CLIENT, TOKEN_SUBCLIENT, TOKEN_BD, TOKEN_TC, TOKEN_PM } from '../../lib/api'
 
 function MapFitBounds({ geoFeatures }) {
   const map = useMap()
@@ -405,6 +405,16 @@ export default function ClientPortal() {
     } catch { return false }
   }, [token])
 
+  const isPmToken = useMemo(() => {
+    if (!token) return false
+    try {
+      const parts = token.split('.')
+      if (parts.length < 2) return false
+      const payload = JSON.parse(atob(parts[1]))
+      return payload?.appId === 'ailocity-pm'
+    } catch { return false }
+  }, [token])
+
   const isBdToken = useMemo(() => {
     if (!token) return false
     try {
@@ -502,6 +512,13 @@ export default function ClientPortal() {
   }, [active, token, loadTerritoryTree, loadTabCollection])
 
   useEffect(() => {
+    if (!token || !isPmToken) return
+    localStorage.removeItem(TOKEN_CLIENT)
+    localStorage.setItem(TOKEN_PM, token)
+    navigate('/pm/dashboard', { replace: true })
+  }, [token, isPmToken, navigate])
+
+  useEffect(() => {
     if (!token || !isTcToken) return
     localStorage.removeItem(TOKEN_CLIENT)
     localStorage.setItem(TOKEN_TC, token)
@@ -516,6 +533,7 @@ export default function ClientPortal() {
   }, [token, isBdToken, navigate])
 
   if (!token) return <Navigate to="/client/login" replace />
+  if (isPmToken) return null
   if (isTcToken) return null
   if (isBdToken) return null
 

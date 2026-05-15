@@ -42,8 +42,9 @@ export async function api(path, options = {}) {
 }
 
 export const TOKEN_SUPERADMIN = 'ailocity_token_superadmin'
-export const TOKEN_ADMIN = 'ailocity_token_admin'
-export const TOKEN_CLIENT = 'ailocity_token_client'
-export const TOKEN_SUBCLIENT = 'ailocity_token_subclient'
-export const TOKEN_BD = 'ailocity_token_bd'
-export const TOKEN_TC = 'ailocity_token_tc'
+export const TOKEN_ADMIN      = 'ailocity_token_admin'
+export const TOKEN_CLIENT     = 'ailocity_token_client'
+export const TOKEN_SUBCLIENT  = 'ailocity_token_subclient'
+export const TOKEN_BD         = 'ailocity_token_bd'
+export const TOKEN_TC         = 'ailocity_token_tc'
+export const TOKEN_PM         = 'ailocity_token_pm'

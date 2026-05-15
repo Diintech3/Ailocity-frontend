@@ -19,7 +19,7 @@ import {
   Menu,
   ChevronDown,
 } from 'lucide-react'
-import { api, TOKEN_ADMIN, TOKEN_CLIENT, TOKEN_BD, TOKEN_TC } from '../../lib/api'
+import { api, TOKEN_ADMIN, TOKEN_CLIENT, TOKEN_BD, TOKEN_TC, TOKEN_PM } from '../../lib/api'
 
 function LogoImage({ logoKey, token }) {
   const [url, setUrl] = useState(null)
@@ -585,7 +585,10 @@ export default function AdminDashboard() {
                                   try {
                                     const res = await api(`/api/admin/apps/${client.id}/impersonate`, { method: 'POST', token })
                                     // Route based on client.appId from table (not JWT)
-                                    if (client.appId === 'ailocity-bd') {
+                                    if (client.appId === 'ailocity-pm') {
+                                      localStorage.setItem(TOKEN_PM, res.token)
+                                      window.open('/pm/dashboard', '_blank')
+                                    } else if (client.appId === 'ailocity-bd') {
                                       localStorage.setItem(TOKEN_BD, res.token)
                                       window.open('/bd/dashboard', '_blank')
                                     } else if (client.appId === 'ailocity-tc') {
