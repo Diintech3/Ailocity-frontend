@@ -19,8 +19,25 @@ import {
   Users,
   X,
   MapPin,
+  Map,
 } from 'lucide-react'
+import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+
 import { api, TOKEN_CLIENT, TOKEN_SUBCLIENT, TOKEN_BD, TOKEN_TC } from '../../lib/api'
+
+function MapFitBounds({ geoFeatures }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!geoFeatures?.length) return
+    try {
+      const layer = L.geoJSON({ type: 'FeatureCollection', features: geoFeatures })
+      if (layer.getBounds().isValid()) map.fitBounds(layer.getBounds(), { padding: [30, 30] })
+    } catch {}
+  }, [geoFeatures, map])
+  return null
+}
 
 // Loads logo from R2 presigned URL
 function ContactLogo({ logoKey, token, size = 'md' }) {
@@ -272,9 +289,6 @@ export default function ClientPortal() {
   const [contactPage, setContactPage] = useState(1)
   const CONTACTS_PER_PAGE = 20
   const [contactKycLoading, setContactKycLoading] = useState(null)
-  const [contactKycFilter, setContactKycFilter] = useState('all')
-  const [contactCategoryFilter, setContactCategoryFilter] = useState('all')
-  const [contactTerritoryFilter, setContactTerritoryFilter] = useState('all')
   // Territory filter state — cascading
   const [tfState, setTfState] = useState('')
   const [tfCity, setTfCity] = useState('')
@@ -285,7 +299,6 @@ export default function ClientPortal() {
   const [aiPrompt, setAiPrompt] = useState('')
   const [territoryData, setTerritoryData] = useState({ states: [] })
   const LAST_TERRITORY_KEY = 'ailocity_last_territory_session'
-  const lastTerritoryRef = useRef({})
   const [selectedState, setSelectedState] = useState('')
   const [selectedCity, setSelectedCity] = useState('')
   const [selectedRegion, setSelectedRegion] = useState('')
@@ -303,9 +316,15 @@ export default function ClientPortal() {
   const [tActiveSt, setTActiveSt] = useState(null)
   const [tActiveCt, setTActiveCt] = useState(null)
   const [tActiveRg, setTActiveRg] = useState(null)
-  const [tModal, setTModal] = useState(null) // { type: 'state'|'city'|'region'|'pod', parentIds: {} }
+  const [tModal, setTModal] = useState(null)
   const [tForm, setTForm] = useState({})
   const [tSaving, setTSaving] = useState(false)
+
+  // Territory Map View state
+  const [tView, setTView] = useState('tree')
+  const [geoData, setGeoData] = useState(null)
+  const [mapLoading, setMapLoading] = useState(false)
+  const [mapPinFilter, setMapPinFilter] = useState('all')
 
   const loadTerritoryTree = useCallback(async () => {
     setTreeLoading(true)
@@ -316,6 +335,58 @@ export default function ClientPortal() {
     } catch {}
     finally { setTreeLoading(false) }
   }, [token])
+
+  // All pods flat list for map
+  const allPods = useMemo(() => {
+    const pods = []
+    for (const st of (treeData.states || [])) {
+      for (const ct of (st.cities || [])) {
+        for (const rg of (ct.regions || [])) {
+          for (const pd of (rg.pods || [])) {
+            pods.push({ ...pd, stateName: st.name, cityName: ct.name, regionName: rg.name })
+          }
+        }
+      }
+    }
+    return pods
+  }, [treeData])
+
+  const contactsWithPin = useMemo(() => {
+    return (lists.contacts || []).filter(c => c.territory?.podId)
+  }, [lists.contacts])
+
+  // Pincode-wise table data (derived, no geocoding)
+  const mapMarkers = useMemo(() => {
+    const podsToShow = mapPinFilter === 'all' ? allPods : allPods.filter(p => p.id === mapPinFilter)
+    const result = []
+    for (const pod of podsToShow) {
+      for (const pin of (pod.pincodes || [])) {
+        const clients = contactsWithPin.filter(c => c.territory?.podId === pod.id)
+        result.push({ pincode: pin, pod, clients })
+      }
+    }
+    return result
+  }, [allPods, mapPinFilter, contactsWithPin])
+
+  const geoDataRef = useRef(null)
+  const loadGeoData = useCallback(async () => {
+    if (geoDataRef.current) return
+    setMapLoading(true)
+    try {
+      const res = await fetch('/pincode-boundaries.geojson')
+      const json = await res.json()
+      geoDataRef.current = json
+      setGeoData(json)
+    } catch { /* skip */ }
+    finally { setMapLoading(false) }
+  }, [])
+
+  useEffect(() => {
+    if (tView === 'map' && active === 'territory') {
+      loadGeoData()
+      if (lists.contacts.length === 0) loadTabCollection('contacts')
+    }
+  }, [tView, active, loadGeoData, lists.contacts.length, loadTabCollection])
 
   const isTcToken = useMemo(() => {
     if (!token) return false
@@ -425,8 +496,9 @@ export default function ClientPortal() {
   useEffect(() => {
     if ((active === 'territory' || active === 'contacts') && token) {
       loadTerritoryTree()
+      if (active === 'territory') loadTabCollection('contacts')
     }
-  }, [active, token, loadTerritoryTree])
+  }, [active, token, loadTerritoryTree, loadTabCollection])
 
   useEffect(() => {
     if (!token || !isTcToken) return
@@ -1496,7 +1568,7 @@ export default function ClientPortal() {
                 if (type === 'state') body = { name: tForm.name, code: tForm.code || '' }
                 if (type === 'city') body = { stateId: parentIds.stateId, name: tForm.name }
                 if (type === 'region') body = { stateId: parentIds.stateId, cityId: parentIds.cityId, name: tForm.name }
-                if (type === 'pod') body = { stateId: parentIds.stateId, cityId: parentIds.cityId, regionId: parentIds.regionId, podNumber: tForm.podNumber, podName: tForm.podName, capacity: tForm.capacity || 100 }
+                if (type === 'pod') body = { stateId: parentIds.stateId, cityId: parentIds.cityId, regionId: parentIds.regionId, podNumber: tForm.podNumber, podName: tForm.podName, capacity: tForm.capacity || 100, pincodes: tForm.pincodes || '' }
                 await api(`/api/business/territories/${type}s`, { token, method: 'POST', body })
                 await loadTerritoryTree()
                 setTModal(null)
@@ -1516,16 +1588,217 @@ export default function ClientPortal() {
                     <h2 className="text-xl font-semibold text-slate-900">Territory Management</h2>
                     <p className="text-sm text-slate-500 mt-0.5">Manage State → City → Region → POD hierarchy</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => { loadTerritoryTree() }}
-                    className="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-3 py-1.5"
-                  >↻ Refresh</button>
+                  <div className="flex items-center gap-2">
+                    {/* View Toggle */}
+                    <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                      <button type="button" onClick={() => setTView('tree')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                          tView === 'tree' ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
+                        }`}>
+                        <Settings size={13} /> Tree
+                      </button>
+                      <button type="button" onClick={() => setTView('map')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                          tView === 'map' ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
+                        }`}>
+                        <Map size={13} /> Map
+                      </button>
+                    </div>
+                    <button type="button" onClick={() => loadTerritoryTree()}
+                      className="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-3 py-1.5">↻ Refresh</button>
+                  </div>
                 </div>
 
                 {treeLoading && <div className="py-10 text-center text-sm text-slate-400">Loading…</div>}
 
-                {!treeLoading && (
+                {/* ── MAP VIEW ── */}
+                {!treeLoading && tView === 'map' && (() => {
+                  // POD ke pincodes ka set
+                  const activePincodes = new Set(
+                    (mapPinFilter === 'all' ? allPods : allPods.filter(p => p.id === mapPinFilter))
+                      .flatMap(p => p.pincodes || [])
+                  )
+
+                  // GeoJSON features filter — sirf wahi pincodes jo PODs mein hain
+                  const filteredFeatures = geoData
+                    ? geoData.features.filter(f => activePincodes.has(String(f.properties?.Pincode || '')))
+                    : []
+
+                  // Pincode → POD + clients map (duplicate pincode safe)
+                  const pinToPod = {}
+                  for (const pod of (mapPinFilter === 'all' ? allPods : allPods.filter(p => p.id === mapPinFilter))) {
+                    for (const pin of (pod.pincodes || [])) {
+                      if (!pinToPod[pin]) pinToPod[pin] = { pod, clients: [] }
+                      const podClients = contactsWithPin.filter(c => c.territory?.podId === pod.id)
+                      pinToPod[pin].clients.push(...podClients)
+                    }
+                  }
+
+                  const styleFeature = (feature) => {
+                    const pin = String(feature.properties?.Pincode || '')
+                    const info = pinToPod[pin]
+                    const hasClients = info?.clients?.length > 0
+                    return {
+                      fillColor: hasClients ? '#FF7A00' : '#94a3b8',
+                      fillOpacity: hasClients ? 0.45 : 0.2,
+                      color: hasClients ? '#FF7A00' : '#64748b',
+                      weight: hasClients ? 2 : 1,
+                    }
+                  }
+
+                  const onEachFeature = (feature, layer) => {
+                    const pin = String(feature.properties?.Pincode || '')
+                    const info = pinToPod[pin]
+                    const officeName = feature.properties?.Office_Name || ''
+                    const clientList = info?.clients || []
+                    layer.bindPopup(`
+                      <div style="min-width:160px;font-family:sans-serif">
+                        <p style="font-weight:700;font-size:13px;margin:0 0 2px">📍 ${pin}</p>
+                        <p style="font-size:11px;color:#64748b;margin:0 0 4px">${officeName}</p>
+                        ${info ? `<p style="font-size:11px;color:#FF7A00;font-weight:600;margin:0 0 4px">${info.pod.podNumber} — ${info.pod.podName}</p>` : ''}
+                        <div style="border-top:1px solid #e2e8f0;padding-top:4px;margin-top:4px">
+                          <p style="font-size:11px;font-weight:600;margin:0 0 3px">Clients (${clientList.length})</p>
+                          ${clientList.length === 0
+                            ? '<p style="font-size:11px;color:#94a3b8">Koi client nahi</p>'
+                            : clientList.slice(0, 5).map(c => `<p style="font-size:11px;margin:1px 0">• ${c.name}${c.company ? ` (${c.company})` : ''}</p>`).join('')
+                          }
+                          ${clientList.length > 5 ? `<p style="font-size:11px;color:#94a3b8">+${clientList.length - 5} more</p>` : ''}
+                        </div>
+                      </div>
+                    `)
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {/* POD Filter */}
+                      <div className="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm">
+                        <MapPin size={14} className="text-orange-500 flex-shrink-0" />
+                        <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Filter by POD</span>
+                        <div className="flex flex-wrap gap-1.5 ml-1">
+                          <button type="button" onClick={() => setMapPinFilter('all')}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                              mapPinFilter === 'all' ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}>All PODs</button>
+                          {allPods.filter(p => p.pincodes?.length).map(p => (
+                            <button key={p.id} type="button" onClick={() => setMapPinFilter(p.id)}
+                              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                                mapPinFilter === p.id ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}>{p.podNumber}</button>
+                          ))}
+                        </div>
+                        {mapLoading && <span className="ml-auto text-xs text-slate-400 animate-pulse">GeoJSON load ho raha hai…</span>}
+                      </div>
+
+                      {/* Stats */}
+                      <div className="grid grid-cols-3 gap-3">
+                        {[
+                          { label: 'Total PODs', value: allPods.length, color: 'text-slate-900' },
+                          { label: 'PODs with Pincodes', value: allPods.filter(p => p.pincodes?.length).length, color: 'text-orange-600' },
+                          { label: 'Mapped Areas', value: filteredFeatures.length, color: 'text-emerald-600' },
+                        ].map(s => (
+                          <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+                            <p className="text-xs text-slate-500">{s.label}</p>
+                            <p className={`text-2xl font-bold mt-0.5 ${s.color}`}>{s.value}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Legend */}
+                      <div className="flex items-center gap-4 bg-white border border-slate-200 rounded-xl px-4 py-2.5 shadow-sm">
+                        <span className="text-xs font-semibold text-slate-600">Legend:</span>
+                        <span className="flex items-center gap-1.5 text-xs text-slate-600">
+                          <span className="w-4 h-3 rounded-sm inline-block" style={{background:'#FF7A00',opacity:0.6}} /> Has Clients
+                        </span>
+                        <span className="flex items-center gap-1.5 text-xs text-slate-600">
+                          <span className="w-4 h-3 rounded-sm inline-block" style={{background:'#94a3b8',opacity:0.4}} /> No Clients
+                        </span>
+                      </div>
+
+                      {allPods.filter(p => p.pincodes?.length).length === 0 ? (
+                        <div className="bg-white border border-dashed border-slate-300 rounded-xl px-6 py-16 text-center">
+                          <MapPin size={32} className="mx-auto mb-3 text-slate-300" />
+                          <p className="text-sm font-medium text-slate-400">Kisi bhi POD mein pincodes nahi hain</p>
+                          <p className="text-xs text-slate-400 mt-1">Tree view mein POD ke ⚙️ icon se pincodes add karein</p>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-slate-200 overflow-hidden shadow-sm" style={{ height: 500 }}>
+                          {mapLoading ? (
+                            <div className="h-full flex items-center justify-center bg-slate-50">
+                              <p className="text-sm text-slate-400 animate-pulse">GeoJSON boundaries load ho rahi hain…</p>
+                            </div>
+                          ) : (
+                            <MapContainer center={[28.6, 77.2]} zoom={11} style={{ height: '100%', width: '100%' }}>
+                              <TileLayer
+                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                              />
+                              {filteredFeatures.length > 0 && (
+                                <>
+                                  <MapFitBounds geoFeatures={filteredFeatures} />
+                                  <GeoJSON
+                                    key={`${mapPinFilter}-${filteredFeatures.length}-${contactsWithPin.length}`}
+                                    data={{ type: 'FeatureCollection', features: filteredFeatures }}
+                                    style={styleFeature}
+                                    onEachFeature={onEachFeature}
+                                  />
+                                </>
+                              )}
+                            </MapContainer>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Pincode wise client table */}
+                      {mapMarkers.length > 0 && (
+                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                          <div className="px-4 py-3 border-b border-slate-200">
+                            <p className="text-sm font-semibold text-slate-900">Pincode-wise Client List</p>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full">
+                              <thead className="bg-slate-50 border-b border-slate-200">
+                                <tr>
+                                  {['Pincode', 'POD', 'City · Region', 'Clients'].map(h => (
+                                    <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {mapMarkers.map((m, i) => (
+                                  <tr key={i} className="hover:bg-slate-50/70">
+                                    <td className="px-4 py-3">
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 border border-orange-200 px-2.5 py-1 text-xs font-bold text-orange-700">
+                                        <MapPin size={10} /> {m.pincode}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <p className="text-xs font-semibold text-slate-800">{m.pod.podNumber}</p>
+                                      <p className="text-xs text-slate-400">{m.pod.podName}</p>
+                                    </td>
+                                    <td className="px-4 py-3 text-xs text-slate-600">{m.pod.cityName} · {m.pod.regionName}</td>
+                                    <td className="px-4 py-3">
+                                      {m.clients.length === 0
+                                        ? <span className="text-xs text-slate-400">—</span>
+                                        : <div className="flex flex-wrap gap-1">
+                                            {m.clients.map(c => (
+                                              <span key={c.id} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">{c.name}</span>
+                                            ))}
+                                          </div>
+                                      }
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* ── TREE VIEW ── */}
+                {!treeLoading && tView === 'tree' && (
                   <div className="grid grid-cols-4 gap-4 h-[calc(100vh-220px)]">
 
                     {/* Column 1: States */}
@@ -1629,10 +1902,31 @@ export default function ClientPortal() {
                         {!tActiveRg && <p className="px-4 py-6 text-xs text-slate-400 text-center">Select a region first</p>}
                         {tActiveRg && (activeRegion?.pods || []).length === 0 && <p className="px-4 py-6 text-xs text-slate-400 text-center">No PODs yet.</p>}
                         {(activeRegion?.pods || []).map(p => (
-                          <div key={p.id} className="px-4 py-3">
-                            <p className="text-sm font-medium text-slate-800">{p.podNumber}</p>
-                            <p className="text-xs text-slate-500">{p.podName}</p>
-                            <p className="text-xs text-slate-400 mt-0.5">Capacity: {p.capacity}</p>
+                          <div key={p.id} className="px-4 py-3 border-b border-slate-100 last:border-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-slate-800">{p.podNumber}</p>
+                                <p className="text-xs text-slate-500">{p.podName}</p>
+                                <p className="text-xs text-slate-400 mt-0.5">Capacity: {p.capacity}</p>
+                                {p.pincodes?.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {p.pincodes.map(pin => (
+                                      <span key={pin} className="rounded-md bg-orange-50 border border-orange-200 px-1.5 py-0.5 text-[10px] font-medium text-orange-700">{pin}</span>
+                                    ))}
+                                  </div>
+                                )}
+                                {(!p.pincodes || p.pincodes.length === 0) && (
+                                  <p className="text-[10px] text-slate-300 mt-1">No pincodes</p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => { setTModal({ type: 'pod-edit', pod: p, parentIds: { stateId: tActiveSt, cityId: tActiveCt, regionId: tActiveRg } }); setTForm({ pincodes: (p.pincodes || []).join(', ') }) }}
+                                className="flex-shrink-0 p-1 rounded text-slate-400 hover:text-orange-500 hover:bg-orange-50"
+                              >
+                                <Settings size={13} />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1645,10 +1939,42 @@ export default function ClientPortal() {
                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setTModal(null)}>
                     <div className="relative w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-                        <h2 className="text-base font-semibold text-slate-900 capitalize">Add {tModal.type}</h2>
+                        <h2 className="text-base font-semibold text-slate-900 capitalize">
+                          {tModal.type === 'pod-edit' ? `Edit ${tModal.pod.podNumber}` : `Add ${tModal.type}`}
+                        </h2>
                         <button type="button" onClick={() => setTModal(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={16} /></button>
                       </div>
-                      <form onSubmit={saveTerritory} className="px-5 py-4 space-y-3">
+                      <form onSubmit={async (e) => {
+                        e.preventDefault()
+                        if (tModal.type === 'pod-edit') {
+                          setTSaving(true)
+                          try {
+                            const pincodes = String(tForm.pincodes || '').split(',').map(s => s.trim()).filter(Boolean)
+                            await api(`/api/business/territories/pods/${tModal.pod.id}`, { token, method: 'PATCH', body: { pincodes } })
+                            await loadTerritoryTree()
+                            setTModal(null); setTForm({})
+                          } catch (err) { setError(err.message || 'Save failed') }
+                          finally { setTSaving(false) }
+                          return
+                        }
+                        saveTerritory(e)
+                      }} className="px-5 py-4 space-y-3">
+                        {tModal.type === 'pod-edit' && (
+                          <div>
+                            <div className="mb-3 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+                              <p className="text-xs font-semibold text-slate-700">{tModal.pod.podNumber} — {tModal.pod.podName}</p>
+                              <p className="text-xs text-slate-400 mt-0.5">Capacity: {tModal.pod.capacity}</p>
+                            </div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">Pincodes <span className="text-slate-400 font-normal">(comma separated)</span></label>
+                            <input
+                              value={tForm.pincodes || ''}
+                              onChange={e => setTForm(p => ({ ...p, pincodes: e.target.value }))}
+                              placeholder="e.g. 122001, 122002, 122003"
+                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500"
+                            />
+                            <p className="text-xs text-slate-400 mt-1">Har pincode comma se alag karo</p>
+                          </div>
+                        )}
                         {tModal.type === 'state' && (
                           <>
                             <div>
@@ -1690,12 +2016,16 @@ export default function ClientPortal() {
                               <label className="block text-xs font-medium text-slate-700 mb-1">Capacity</label>
                               <input type="number" value={tForm.capacity || 100} onChange={e => setTForm(p => ({ ...p, capacity: Number(e.target.value) }))} min={1} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
                             </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700 mb-1">Pincodes <span className="text-slate-400 font-normal">(comma separated)</span></label>
+                              <input value={tForm.pincodes || ''} onChange={e => setTForm(p => ({ ...p, pincodes: e.target.value }))} placeholder="e.g. 110001, 110002, 110003" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/25 focus:border-orange-500" />
+                            </div>
                           </>
                         )}
                         <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                           <button type="button" onClick={() => setTModal(null)} className="rounded-lg border border-slate-200 bg-slate-100 px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-200">Cancel</button>
                           <button type="submit" disabled={tSaving} className="rounded-lg bg-gradient-to-r from-[#FF7A00] to-[#FFB000] px-5 py-1.5 text-sm font-medium text-white disabled:opacity-60">
-                            {tSaving ? 'Saving…' : `Add ${tModal.type.charAt(0).toUpperCase() + tModal.type.slice(1)}`}
+                            {tSaving ? 'Saving…' : tModal.type === 'pod-edit' ? 'Save Pincodes' : `Add ${tModal.type.charAt(0).toUpperCase() + tModal.type.slice(1)}`}
                           </button>
                         </div>
                       </form>
