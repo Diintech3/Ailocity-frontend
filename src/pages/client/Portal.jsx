@@ -326,6 +326,12 @@ export default function ClientPortal() {
   const [mapLoading, setMapLoading] = useState(false)
   const [mapPinFilter, setMapPinFilter] = useState('all')
 
+  const loadTabCollection = useCallback(async (tabId) => {
+    if (!ENDPOINTS[tabId]) return
+    const res = await api(ENDPOINTS[tabId], { token })
+    setLists((prev) => ({ ...prev, [tabId]: res[RES_KEYS[tabId]] || [] }))
+  }, [token])
+
   const loadTerritoryTree = useCallback(async () => {
     setTreeLoading(true)
     try {
@@ -373,13 +379,14 @@ export default function ClientPortal() {
     if (geoDataRef.current) return
     setMapLoading(true)
     try {
-      const res = await fetch('/pincode-boundaries.geojson')
+      const { url } = await api('/api/business/geo/boundaries-url', { token })
+      const res = await fetch(url)
       const json = await res.json()
       geoDataRef.current = json
       setGeoData(json)
     } catch { /* skip */ }
     finally { setMapLoading(false) }
-  }, [])
+  }, [token])
 
   useEffect(() => {
     if (tView === 'map' && active === 'territory') {
@@ -450,12 +457,6 @@ export default function ClientPortal() {
       leads: leadsRes.leads || [],
       campaigns: campaignRes.campaigns || [],
     }))
-  }, [token])
-
-  const loadTabCollection = useCallback(async (tabId) => {
-    if (!ENDPOINTS[tabId]) return
-    const res = await api(ENDPOINTS[tabId], { token })
-    setLists((prev) => ({ ...prev, [tabId]: res[RES_KEYS[tabId]] || [] }))
   }, [token])
 
   useEffect(() => {

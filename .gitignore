@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Large GeoJSON files — store on R2/CDN instead
+public/*.geojson
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
