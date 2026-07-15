@@ -17,6 +17,7 @@ import {
   Settings,
   UserRound,
   Users,
+  Workflow,
   X,
   MapPin,
   Map,
@@ -64,16 +65,16 @@ function ContactLogo({ logoKey, token, size = 'md' }) {
 const TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'contacts', label: 'Business', icon: Users },
-  { id: 'territory', label: 'Territory', icon: MapPin },
-  { id: 'services', label: 'Services', icon: Settings },
-  { id: 'products', label: 'Products', icon: Package },
   { id: 'agents', label: 'AI Agents', icon: Bot },
-  { id: 'datastore', label: 'Data Store', icon: Database },
-  { id: 'leads', label: 'Leads', icon: FileText },
-  { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
-  { id: 'content', label: 'Content', icon: FileText },
-  { id: 'reels', label: 'Reels', icon: Film },
-  { id: 'profile', label: 'Profile', icon: UserRound },
+  { id: 'tools', label: 'Tools', icon: Workflow },
+  { id: 'services', label: 'Services', icon: Settings, hiddenInSidebar: true },
+  { id: 'products', label: 'Products', icon: Package, hiddenInSidebar: true },
+  { id: 'leads', label: 'Leads', icon: FileText, hiddenInSidebar: true },
+  { id: 'campaigns', label: 'Campaigns', icon: Megaphone, hiddenInSidebar: true },
+  { id: 'content', label: 'Content', icon: FileText, hiddenInSidebar: true },
+  { id: 'reels', label: 'Reels', icon: Film, hiddenInSidebar: true },
+  { id: 'profile', label: 'Profile', icon: UserRound, hiddenInSidebar: true },
+  { id: 'settings', label: 'Settings', icon: Settings, hiddenInSidebar: true },
 ]
 
 const ENDPOINTS = {
@@ -309,6 +310,7 @@ export default function ClientPortal() {
   const [editSelCity, setEditSelCity] = useState('')
   const [editSelRegion, setEditSelRegion] = useState('')
   const [editSelPod, setEditSelPod] = useState('')
+  const [agentsSubTab, setAgentsSubTab] = useState('agents')
 
   // Territory management state
   const [treeData, setTreeData] = useState({ states: [] })
@@ -316,6 +318,8 @@ export default function ClientPortal() {
   const [tActiveSt, setTActiveSt] = useState(null)
   const [tActiveCt, setTActiveCt] = useState(null)
   const [tActiveRg, setTActiveRg] = useState(null)
+  const [tSelectedPodId, setTSelectedPodId] = useState(null)
+  const [selectedPincode, setSelectedPincode] = useState('')
   const [tModal, setTModal] = useState(null)
   const [tForm, setTForm] = useState({})
   const [tSaving, setTSaving] = useState(false)
@@ -436,7 +440,19 @@ export default function ClientPortal() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const heading = useMemo(() => TABS.find((x) => x.id === active)?.label || 'Client', [active])
+  const heading = useMemo(() => {
+    const tab = TABS.find((x) => x.id === active)
+    if (tab) return tab.label
+    const fallback = {
+      services: 'Services',
+      products: 'Products',
+      leads: 'Leads',
+      campaigns: 'Campaigns',
+      content: 'Content',
+      reels: 'Reels',
+    }[active]
+    return fallback || 'Client'
+  }, [active])
 
   const loadOverview = useCallback(async () => {
     const [meRes, dashRes, creditsRes, leadsRes, campaignRes] = await Promise.all([
@@ -784,8 +800,17 @@ export default function ClientPortal() {
     const rows = lists[tab] || []
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActive('tools')}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-orange-300 hover:text-orange-600"
+            >
+              <ChevronRight size={16} className="rotate-180" /> Back
+            </button>
+            <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
+          </div>
           <button
             type="button"
             onClick={() => openAdd(tab)}
@@ -857,8 +882,8 @@ export default function ClientPortal() {
             </div>
           )}
         </div>
-        <nav className="flex-1 space-y-1 p-2">
-          {TABS.map(({ id, label, icon: Icon }) => (
+        <nav className="flex-1 space-y-1 overflow-y-auto p-2">
+          {TABS.filter(({ hiddenInSidebar }) => !hiddenInSidebar).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
@@ -872,6 +897,26 @@ export default function ClientPortal() {
             </button>
           ))}
         </nav>
+        <div className="border-t border-orange-200 bg-white/80 px-2 py-2 backdrop-blur sticky bottom-0">
+          <div className="space-y-1">
+            {[
+              { id: 'profile', label: 'Profile', icon: UserRound },
+              { id: 'settings', label: 'Settings', icon: Settings },
+            ].map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActive(id)}
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${
+                  active === id ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white' : 'text-slate-600 hover:bg-orange-100'
+                }`}
+              >
+                <Icon size={18} />
+                {sidebarOpen && <span>{label}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
       </aside>
 
       <main className="flex-1 overflow-hidden">
@@ -997,6 +1042,38 @@ export default function ClientPortal() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {!bootLoading && !tabLoading && active === 'settings' && (
+            <div className="max-w-5xl space-y-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                    <Settings size={22} />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-slate-900">Settings</h2>
+                    <p className="text-sm text-slate-500">Manage portal preferences and account controls.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                {[
+                  { title: 'Notifications', desc: 'Choose your preferred alert settings.', badge: 'Enabled' },
+                  { title: 'Automation', desc: 'Adjust your workflow preferences.', badge: 'Active' },
+                  { title: 'Security', desc: 'Review access and session controls.', badge: 'Protected' },
+                  { title: 'Billing', desc: 'View current plan and usage limits.', badge: 'Pro' },
+                ].map((item) => (
+                  <div key={item.title} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-base font-semibold text-slate-900">{item.title}</h3>
+                      <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-medium text-orange-700">{item.badge}</span>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-500">{item.desc}</p>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -1141,31 +1218,75 @@ export default function ClientPortal() {
 
           {!bootLoading && !tabLoading && active === 'agents' && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-slate-900">AI Agents</h2>
-              <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      {['Name', 'Type', 'Calls', 'Status', 'Action'].map((h) => (
-                        <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider text-slate-500">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {agents.length === 0 && tableEmpty('agents')}
-                    {agents.map((a) => (
-                      <tr key={a.name}>
-                        <td className="px-4 py-3 text-sm text-slate-700">{a.name}</td>
-                        <td className="px-4 py-3 text-sm text-slate-700">{a.type}</td>
-                        <td className="px-4 py-3 text-sm text-slate-700">{a.calls}</td>
-                        <td className="px-4 py-3 text-sm"><span className={`rounded-full px-2 py-1 text-xs font-medium ${pill(a.status)}`}>{a.status}</span></td>
-                        <td className="px-4 py-3 text-sm">
-                          <button type="button" onClick={() => openView('agents', a)} className="rounded-md border border-slate-200 px-2 py-1 hover:bg-slate-50">View</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white">
+                    <Bot size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-slate-900">AI Agents</h2>
+                    <p className="text-sm text-slate-500">Manage agents and connected data resources.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: 'agents', label: 'AI Agents' },
+                    { id: 'datastore', label: 'Data Store' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setAgentsSubTab(tab.id)}
+                      className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                        agentsSubTab === tab.id
+                          ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4">
+                  {agentsSubTab === 'agents' ? (
+                    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            {['Name', 'Type', 'Calls', 'Status', 'Action'].map((h) => (
+                              <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider text-slate-500">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {agents.length === 0 && tableEmpty('agents')}
+                          {agents.map((a) => (
+                            <tr key={a.name}>
+                              <td className="px-4 py-3 text-sm text-slate-700">{a.name}</td>
+                              <td className="px-4 py-3 text-sm text-slate-700">{a.type}</td>
+                              <td className="px-4 py-3 text-sm text-slate-700">{a.calls}</td>
+                              <td className="px-4 py-3 text-sm"><span className={`rounded-full px-2 py-1 text-xs font-medium ${pill(a.status)}`}>{a.status}</span></td>
+                              <td className="px-4 py-3 text-sm">
+                                <button type="button" onClick={() => openView('agents', a)} className="rounded-md border border-slate-200 px-2 py-1 hover:bg-slate-50">View</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                      {renderGeneric('datastore', 'Data Store', [
+                        { key: 'name', label: 'Name' },
+                        { key: 'type', label: 'Type' },
+                        { key: 'size', label: 'Size' },
+                        { key: 'url', label: 'URL' },
+                      ], true)}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1182,7 +1303,150 @@ export default function ClientPortal() {
             { key: 'price', label: 'Price' },
             { key: 'status', label: 'Status', kind: 'badge' },
           ])}
-          {!bootLoading && !tabLoading && active === 'contacts' && (() => {
+          {!bootLoading && !tabLoading && active === 'contacts' && contactViewItem && (
+            <div className="space-y-5 max-w-4xl">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => setContactViewItem(null)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:border-orange-300 hover:text-orange-600">
+                    <ChevronRight size={16} className="rotate-180" /> Back
+                  </button>
+                  <div className="flex items-center gap-3">
+                    {contactViewItem.logoKey
+                      ? <ContactLogo logoKey={contactViewItem.logoKey} token={token} size="lg" />
+                      : <div className="w-12 h-12 rounded-full bg-orange-100 border border-slate-200 flex items-center justify-center"><span className="text-orange-600 text-sm font-bold">{(contactViewItem.name || '?').slice(0,2).toUpperCase()}</span></div>
+                    }
+                    <div>
+                      <h2 className="text-xl font-semibold text-slate-900">{contactViewItem.name}</h2>
+                      <p className="text-sm text-slate-500">{contactViewItem.company || '—'}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full px-3 py-1 text-xs font-medium ${{ client: 'bg-orange-100 text-orange-600', server: 'bg-violet-100 text-violet-700' }[contactViewItem.type] || 'bg-slate-100 text-slate-600'}`}>{contactViewItem.type}</span>
+                  <span className={`rounded-full px-3 py-1 text-xs font-medium ${pill(contactViewItem.status)}`}>{contactViewItem.status}</span>
+                  <button type="button" disabled={contactKycLoading !== null} onClick={async () => {
+                    try { setContactKycLoading('verified'); await api(`/api/business/contacts/${contactViewItem.id}/kyc`, { token, method: 'PATCH', body: { kyc: 'verified' } }); await loadTabCollection('contacts'); setContactViewItem(prev => ({ ...prev, kyc: 'verified' })) }
+                    catch (err) { setError(err.message || 'KYC update failed') } finally { setContactKycLoading(null) }
+                  }} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 px-3 py-1.5 text-xs font-medium text-white">
+                    {contactKycLoading === 'verified' ? <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : '✓'} Verify KYC
+                  </button>
+                  <button type="button" disabled={contactKycLoading !== null} onClick={async () => {
+                    try { setContactKycLoading('rejected'); await api(`/api/business/contacts/${contactViewItem.id}/kyc`, { token, method: 'PATCH', body: { kyc: 'rejected' } }); await loadTabCollection('contacts'); setContactViewItem(prev => ({ ...prev, kyc: 'rejected' })) }
+                    catch (err) { setError(err.message || 'KYC update failed') } finally { setContactKycLoading(null) }
+                  }} className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-60 px-3 py-1.5 text-xs font-medium text-white">
+                    {contactKycLoading === 'rejected' ? <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : '✗'} Reject KYC
+                  </button>
+                  <button type="button" onClick={() => { const item = contactViewItem; setContactViewItem(null); openContactEdit(item) }} className="rounded-lg bg-gradient-to-r from-[#FF7A00] to-[#FFB000] px-3 py-1.5 text-xs font-medium text-white hover:from-[#e06e00] hover:to-[#e6a000]">Edit</button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Business Info */}
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+                  <div className="border-b border-slate-200 px-5 py-3"><p className="text-sm font-semibold text-slate-900">Business Information</p></div>
+                  <div className="p-5 grid grid-cols-2 gap-3">
+                    {contactViewItem.logoKey && (
+                      <div className="col-span-2 flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2">
+                        <ContactLogo logoKey={contactViewItem.logoKey} token={token} size="xl" />
+                        <div><p className="text-xs text-slate-400">Business Logo</p><p className="text-sm font-medium text-slate-800 mt-0.5">{contactViewItem.name}</p></div>
+                      </div>
+                    )}
+                    {[['Full Name', contactViewItem.name],['Company', contactViewItem.company],['Business Type', contactViewItem.businessType],['Category', contactViewItem.category],['Sub Category', contactViewItem.subCategory],['Website', contactViewItem.websiteUrl],['GST Number', contactViewItem.gstNumber],['PAN Number', contactViewItem.panNumber]].map(([l, v]) => v ? (
+                      <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
+                        <p className="text-xs text-slate-400">{l}</p>
+                        <p className="text-sm font-medium text-slate-800 mt-0.5 break-all">{v}</p>
+                      </div>
+                    ) : null)}
+                  </div>
+                </div>
+
+                {/* Contact + Location */}
+                <div className="space-y-5">
+                  <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+                    <div className="border-b border-slate-200 px-5 py-3"><p className="text-sm font-semibold text-slate-900">Contact Details</p></div>
+                    <div className="p-5 grid grid-cols-2 gap-3">
+                      {[['Email', contactViewItem.email],['Mobile', contactViewItem.mobile],['Alternate Mobile', contactViewItem.alternateMobile]].map(([l, v]) => v ? (
+                        <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
+                          <p className="text-xs text-slate-400">{l}</p>
+                          <p className="text-sm font-medium text-slate-800 mt-0.5">{v}</p>
+                        </div>
+                      ) : null)}
+                    </div>
+                  </div>
+
+                  {(contactViewItem.city || contactViewItem.address || contactViewItem.state) && (
+                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+                      <div className="border-b border-slate-200 px-5 py-3"><p className="text-sm font-semibold text-slate-900">Location</p></div>
+                      <div className="p-5 grid grid-cols-2 gap-3">
+                        {[['Address', contactViewItem.address],['City', contactViewItem.city],['State', contactViewItem.state],['Pincode', contactViewItem.pincode],['Country', contactViewItem.country]].map(([l, v]) => v ? (
+                          <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
+                            <p className="text-xs text-slate-400">{l}</p>
+                            <p className="text-sm font-medium text-slate-800 mt-0.5">{v}</p>
+                          </div>
+                        ) : null)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Territory */}
+                {(contactViewItem.territory?.stateName || contactViewItem.stateName) && (
+                  <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+                    <div className="border-b border-slate-200 px-5 py-3"><p className="text-sm font-semibold text-slate-900">Territory Assignment</p></div>
+                    <div className="p-5">
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3">
+                        <p className="text-sm font-medium text-slate-800">
+                          {contactViewItem.territory?.stateName || contactViewItem.stateName} → {contactViewItem.territory?.cityName || contactViewItem.cityName} → {contactViewItem.territory?.regionName || contactViewItem.region} Region → {contactViewItem.territory?.podNumber || contactViewItem.podNumber}
+                        </p>
+                        {(contactViewItem.territory?.podName || contactViewItem.podName) && (
+                          <p className="text-xs text-slate-500 mt-1">POD: {contactViewItem.territory?.podName || contactViewItem.podName}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* CRM */}
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+                  <div className="border-b border-slate-200 px-5 py-3"><p className="text-sm font-semibold text-slate-900">CRM Details</p></div>
+                  <div className="p-5 grid grid-cols-2 gap-3">
+                    {[['MBC Type', contactViewItem.type],['MBC Sub Category', contactViewItem.mbcSubCategory],['Status', contactViewItem.status],['KYC', contactViewItem.kyc || 'pending'],['Created At', contactViewItem.createdAt ? new Date(contactViewItem.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : null]].map(([l, v]) => v ? (
+                      <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
+                        <p className="text-xs text-slate-400">{l}</p>
+                        <p className="text-sm font-medium text-slate-800 mt-0.5 capitalize">{v}</p>
+                      </div>
+                    ) : null)}
+                  </div>
+                </div>
+
+                {/* Social */}
+                {(contactViewItem.instagramUrl || contactViewItem.facebookUrl || contactViewItem.youtubeUrl) && (
+                  <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+                    <div className="border-b border-slate-200 px-5 py-3"><p className="text-sm font-semibold text-slate-900">Social / Online Presence</p></div>
+                    <div className="p-5 grid grid-cols-2 gap-3">
+                      {[['Instagram', contactViewItem.instagramUrl],['Facebook', contactViewItem.facebookUrl],['YouTube', contactViewItem.youtubeUrl]].map(([l, v]) => v ? (
+                        <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
+                          <p className="text-xs text-slate-400">{l}</p>
+                          <a href={v} target="_blank" rel="noreferrer" className="text-sm font-medium text-orange-500 hover:underline mt-0.5 block truncate">{v}</a>
+                        </div>
+                      ) : null)}
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes */}
+                {contactViewItem.notes && (
+                  <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+                    <div className="border-b border-slate-200 px-5 py-3"><p className="text-sm font-semibold text-slate-900">Notes</p></div>
+                    <div className="p-5"><p className="text-sm text-slate-700 whitespace-pre-wrap">{contactViewItem.notes}</p></div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!bootLoading && !tabLoading && active === 'contacts' && !contactViewItem && (() => {
             const rows = [...(lists.contacts || [])].reverse()
             const typeColors = {
               client:           'bg-orange-100 text-orange-600',
@@ -1434,7 +1698,7 @@ export default function ClientPortal() {
                         {pagedRows.length === 0 ? (
                           <tr><td colSpan={12} className="px-6 py-12 text-center text-sm text-slate-400">No businesses found.</td></tr>
                         ) : pagedRows.map((r, idx) => (
-                          <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
+                          <tr key={r.id} className="hover:bg-slate-50/70 transition-colors cursor-pointer" onClick={() => setContactViewItem(r)}>
                             <td className="px-2 py-2 text-xs text-slate-400 w-8">{(contactPage - 1) * CONTACTS_PER_PAGE + idx + 1}</td>
                             <td className="px-2 py-2 w-10">
                               {r.logoKey
@@ -1452,11 +1716,50 @@ export default function ClientPortal() {
                               <p className="text-xs text-slate-700 truncate max-w-[100px]">{r.category || '—'}</p>
                               <p className="text-xs text-slate-400 truncate max-w-[100px]">{r.subCategory || ''}</p>
                             </td>
-                            <td className="px-2 py-2 w-28">
+                            <td className="px-2 py-2 w-28" onClick={e => e.stopPropagation()}>
                               {r.territory?.podNumber ? (
-                                <div>
+                                <div className="group relative">
                                   <p className="text-xs font-medium text-orange-600 truncate max-w-[100px]">{r.territory.podNumber}</p>
                                   <p className="text-xs text-slate-400 truncate max-w-[100px]">{r.territory.cityName}{r.territory.regionName ? ` · ${r.territory.regionName}` : ''}</p>
+                                  {/* Hover Tooltip */}
+                                  <div className="absolute left-0 top-full mt-1 z-30 hidden group-hover:block w-52 rounded-xl border border-orange-200 bg-white shadow-xl p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-orange-500 mb-2">Territory Details</p>
+                                    <div className="space-y-1">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px] text-slate-400 w-12 flex-shrink-0">State</span>
+                                        <span className="text-xs font-medium text-slate-700">{r.territory.stateName || '—'}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px] text-slate-400 w-12 flex-shrink-0">City</span>
+                                        <span className="text-xs font-medium text-slate-700">{r.territory.cityName || '—'}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px] text-slate-400 w-12 flex-shrink-0">Region</span>
+                                        <span className="text-xs font-medium text-slate-700">{r.territory.regionName || '—'}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px] text-slate-400 w-12 flex-shrink-0">POD</span>
+                                        <span className="text-xs font-semibold text-orange-600">{r.territory.podNumber}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px] text-slate-400 w-12 flex-shrink-0">Name</span>
+                                        <span className="text-xs text-slate-600">{r.territory.podName || '—'}</span>
+                                      </div>
+                                      {(() => {
+                                        const pod = allPods.find(p => p.id === r.territory?.podId)
+                                        return pod?.pincodes?.length > 0 ? (
+                                          <div className="pt-1.5 mt-1 border-t border-slate-100">
+                                            <p className="text-[10px] text-slate-400 mb-1">Pincodes</p>
+                                            <div className="flex flex-wrap gap-1">
+                                              {pod.pincodes.map(pin => (
+                                                <span key={pin} className="rounded-md bg-orange-50 border border-orange-200 px-1.5 py-0.5 text-[10px] font-medium text-orange-700">{pin}</span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ) : null
+                                      })()}
+                                    </div>
+                                  </div>
                                 </div>
                               ) : <span className="text-xs text-slate-300">—</span>}
                             </td>
@@ -1477,7 +1780,7 @@ export default function ClientPortal() {
                             <td className="px-2 py-2 w-20">
                               <span className={`rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${pill(r.status)}`}>{r.status || '—'}</span>
                             </td>
-                            <td className="px-2 py-2 w-16">
+                            <td className="px-2 py-2 w-16" onClick={e => e.stopPropagation()}>
                               <button type="button" onClick={async () => {
                                 try {
                                   const res = await api(`/api/business/contacts/${r.id}/login`, { token, method: 'POST' })
@@ -1488,7 +1791,7 @@ export default function ClientPortal() {
                                 Login
                               </button>
                             </td>
-                            <td className="px-2 py-2 w-10">
+                            <td className="px-2 py-2 w-10" onClick={e => e.stopPropagation()}>
                               <div className="relative" ref={contactSettingOpen === r.id ? settingRef : null}>
                                 <button
                                   type="button"
@@ -1568,6 +1871,53 @@ export default function ClientPortal() {
             { key: 'status', label: 'Status', kind: 'badge' },
             { key: 'scheduledAt', label: 'Scheduled' },
           ])}
+          {!bootLoading && !tabLoading && active === 'tools' && (
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-sm">
+                    <Workflow size={22} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Tools</h2>
+                    <p className="text-sm text-slate-500">Quick access to your main business modules</p>
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {[
+                  { id: 'reels', label: 'Reels', desc: 'Manage reels, publishing status, and performance.', icon: Film, color: 'from-pink-500 to-rose-500' },
+                  { id: 'content', label: 'Content', desc: 'Plan, publish, and review content campaigns.', icon: FileText, color: 'from-amber-500 to-orange-500' },
+                  { id: 'campaigns', label: 'Campaigns', desc: 'Track campaigns, budgets, and timelines.', icon: Megaphone, color: 'from-orange-500 to-amber-500' },
+                  { id: 'leads', label: 'Leads', desc: 'Review incoming requirements and lead follow-ups.', icon: FileText, color: 'from-cyan-500 to-sky-500' },
+                  { id: 'products', label: 'Products', desc: 'Create and manage your product catalog.', icon: Package, color: 'from-emerald-500 to-green-500' },
+                  { id: 'services', label: 'Services', desc: 'Organize and manage available services.', icon: Settings, color: 'from-violet-500 to-purple-500' },
+                  { id: 'territory', label: 'Territory', desc: 'Manage state, city, region, and POD hierarchy.', icon: MapPin, color: 'from-slate-600 to-slate-800' },
+                ].map((item) => {
+                  const Icon = item.icon
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActive(item.id)}
+                      className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-orange-300 hover:shadow-lg"
+                    >
+                      <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${item.color} text-white shadow-sm transition-transform duration-200 group-hover:scale-105`}>
+                        <Icon size={20} />
+                      </div>
+                      <h3 className="text-base font-semibold text-slate-900">{item.label}</h3>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">{item.desc}</p>
+                      <div className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-orange-600 transition group-hover:gap-3">
+                        Open module
+                        <ChevronRight size={16} />
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {!bootLoading && !tabLoading && active === 'reels' && renderGeneric('reels', 'Reels Management', [
             { key: 'title', label: 'Title' },
             { key: 'platform', label: 'Platform' },
@@ -1599,13 +1949,26 @@ export default function ClientPortal() {
             const activeState = treeData.states?.find(s => s.id === tActiveSt)
             const activeCity = activeState?.cities?.find(c => c.id === tActiveCt)
             const activeRegion = activeCity?.regions?.find(r => r.id === tActiveRg)
+            const availablePods = activeRegion?.pods || []
+            const selectedPod = availablePods.find(p => p.id === tSelectedPodId) || availablePods[0] || null
+            const totalPincodeEntries = allPods.reduce((sum, pod) => sum + (pod.pincodes?.length || 0), 0)
+            const podsWithPincodes = allPods.filter(p => p.pincodes?.length).length
 
             return (
               <div className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-semibold text-slate-900">Territory Management</h2>
-                    <p className="text-sm text-slate-500 mt-0.5">Manage State → City → Region → POD hierarchy</p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActive('tools')}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-orange-300 hover:text-orange-600"
+                    >
+                      <ChevronRight size={16} className="rotate-180" /> Back
+                    </button>
+                    <div>
+                      <h2 className="text-xl font-semibold text-slate-900">Territory Management</h2>
+                      <p className="text-sm text-slate-500 mt-0.5">Manage State → City → Region → POD hierarchy</p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {/* View Toggle */}
@@ -1625,6 +1988,30 @@ export default function ClientPortal() {
                     </div>
                     <button type="button" onClick={() => loadTerritoryTree()}
                       className="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-3 py-1.5">↻ Refresh</button>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-amber-50 p-4 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 text-white shadow-sm">
+                        <MapPin size={18} />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-orange-500">Pincode</p>
+                        <p className="text-sm font-semibold text-slate-900">Coverage Summary</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-center">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Pincodes</p>
+                        <p className="mt-0.5 text-lg font-bold text-slate-900">{totalPincodeEntries}</p>
+                      </div>
+                      <div className="rounded-xl border border-orange-200 bg-orange-100 px-3 py-2 text-center">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-600">PODs</p>
+                        <p className="mt-0.5 text-lg font-bold text-orange-600">{podsWithPincodes}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1709,11 +2096,12 @@ export default function ClientPortal() {
                       </div>
 
                       {/* Stats */}
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid gap-3 md:grid-cols-4">
                         {[
                           { label: 'Total PODs', value: allPods.length, color: 'text-slate-900' },
                           { label: 'PODs with Pincodes', value: allPods.filter(p => p.pincodes?.length).length, color: 'text-orange-600' },
                           { label: 'Mapped Areas', value: filteredFeatures.length, color: 'text-emerald-600' },
+                          { label: 'Pincode Entries', value: allPods.reduce((sum, pod) => sum + (pod.pincodes?.length || 0), 0), color: 'text-sky-600' },
                         ].map(s => (
                           <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
                             <p className="text-xs text-slate-500">{s.label}</p>
@@ -1818,7 +2206,7 @@ export default function ClientPortal() {
 
                 {/* ── TREE VIEW ── */}
                 {!treeLoading && tView === 'tree' && (
-                  <div className="grid grid-cols-4 gap-4 h-[calc(100vh-220px)]">
+                  <div className="grid grid-cols-5 gap-4 h-[calc(100vh-220px)]">
 
                     {/* Column 1: States */}
                     <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
@@ -1836,7 +2224,7 @@ export default function ClientPortal() {
                           <button
                             key={s.id}
                             type="button"
-                            onClick={() => { setTActiveSt(s.id); setTActiveCt(null); setTActiveRg(null) }}
+                            onClick={() => { setTActiveSt(s.id); setTActiveCt(null); setTActiveRg(null); setTSelectedPodId(null); setSelectedPincode('') }}
                             className={`w-full text-left px-4 py-3 text-sm transition-colors ${
                               tActiveSt === s.id ? 'bg-orange-50 text-orange-700 font-medium' : 'text-slate-700 hover:bg-slate-50'
                             }`}
@@ -1866,7 +2254,7 @@ export default function ClientPortal() {
                           <button
                             key={c.id}
                             type="button"
-                            onClick={() => { setTActiveCt(c.id); setTActiveRg(null) }}
+                            onClick={() => { setTActiveCt(c.id); setTActiveRg(null); setTSelectedPodId(null); setSelectedPincode('') }}
                             className={`w-full text-left px-4 py-3 text-sm transition-colors ${
                               tActiveCt === c.id ? 'bg-orange-50 text-orange-700 font-medium' : 'text-slate-700 hover:bg-slate-50'
                             }`}
@@ -1895,7 +2283,7 @@ export default function ClientPortal() {
                           <button
                             key={r.id}
                             type="button"
-                            onClick={() => setTActiveRg(r.id)}
+                            onClick={() => { setTActiveRg(r.id); setTSelectedPodId(null); setSelectedPincode('') }}
                             className={`w-full text-left px-4 py-3 text-sm transition-colors ${
                               tActiveRg === r.id ? 'bg-orange-50 text-orange-700 font-medium' : 'text-slate-700 hover:bg-slate-50'
                             }`}
@@ -1917,38 +2305,111 @@ export default function ClientPortal() {
                           </button>
                         )}
                       </div>
-                      <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                      <div className="flex-1 overflow-y-auto">
                         {!tActiveRg && <p className="px-4 py-6 text-xs text-slate-400 text-center">Select a region first</p>}
                         {tActiveRg && (activeRegion?.pods || []).length === 0 && <p className="px-4 py-6 text-xs text-slate-400 text-center">No PODs yet.</p>}
-                        {(activeRegion?.pods || []).map(p => (
-                          <div key={p.id} className="px-4 py-3 border-b border-slate-100 last:border-0">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-slate-800">{p.podNumber}</p>
-                                <p className="text-xs text-slate-500">{p.podName}</p>
-                                <p className="text-xs text-slate-400 mt-0.5">Capacity: {p.capacity}</p>
-                                {p.pincodes?.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-1.5">
-                                    {p.pincodes.map(pin => (
-                                      <span key={pin} className="rounded-md bg-orange-50 border border-orange-200 px-1.5 py-0.5 text-[10px] font-medium text-orange-700">{pin}</span>
-                                    ))}
-                                  </div>
-                                )}
-                                {(!p.pincodes || p.pincodes.length === 0) && (
-                                  <p className="text-[10px] text-slate-300 mt-1">No pincodes</p>
-                                )}
+                        <div className="divide-y divide-slate-100">
+                          {(activeRegion?.pods || []).map(p => (
+                            <div key={p.id} className={`px-4 py-3 border-b border-slate-100 last:border-0 cursor-pointer ${tSelectedPodId === p.id ? 'bg-orange-50' : 'bg-white'}`} onClick={() => { setTSelectedPodId(p.id); setSelectedPincode('') }}>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-slate-800">{p.podNumber}</p>
+                                  <p className="text-xs text-slate-500">{p.podName}</p>
+                                  <p className="text-xs text-slate-400 mt-0.5">Capacity: {p.capacity}</p>
+                                  <p className="text-[10px] text-slate-400 mt-0.5">{p.pincodes?.length || 0} pincodes</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setTModal({ type: 'pod-edit', pod: p, parentIds: { stateId: tActiveSt, cityId: tActiveCt, regionId: tActiveRg } }); setTForm({ pincodes: (p.pincodes || []).join(', ') }) }}
+                                  className="flex-shrink-0 p-1 rounded text-slate-400 hover:text-orange-500 hover:bg-orange-50"
+                                >
+                                  <Settings size={13} />
+                                </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => { setTModal({ type: 'pod-edit', pod: p, parentIds: { stateId: tActiveSt, cityId: tActiveCt, regionId: tActiveRg } }); setTForm({ pincodes: (p.pincodes || []).join(', ') }) }}
-                                className="flex-shrink-0 p-1 rounded text-slate-400 hover:text-orange-500 hover:bg-orange-50"
-                              >
-                                <Settings size={13} />
-                              </button>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
+                    </div>
+
+                    {/* Column 5: Pincodes */}
+                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Pincodes</p>
+                        {tSelectedPodId && (
+                          <button
+                            type="button"
+                            onClick={() => { setTModal({ type: 'pod-edit', pod: selectedPod, parentIds: { stateId: tActiveSt, cityId: tActiveCt, regionId: tActiveRg } }); setTForm({ pincodes: (selectedPod?.pincodes || []).join(', ') }) }}
+                            className="w-6 h-6 rounded-md bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600"
+                          >
+                            <Plus size={13} />
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex-1 overflow-y-auto">
+                        {!tSelectedPodId && (
+                          <p className="px-4 py-6 text-xs text-slate-400 text-center">Select a POD first</p>
+                        )}
+                        {tSelectedPodId && selectedPod && (
+                          <>
+                            {/* POD Info Banner */}
+                            <div className="px-4 py-2.5 bg-orange-50 border-b border-orange-100">
+                              <p className="text-xs font-semibold text-orange-700">{selectedPod.podNumber}</p>
+                              <p className="text-[11px] text-slate-500">{selectedPod.podName}</p>
+                            </div>
+                            {/* Pincode List */}
+                            {(selectedPod.pincodes || []).length === 0 ? (
+                              <div className="px-4 py-8 text-center">
+                                <MapPin size={24} className="mx-auto mb-2 text-slate-300" />
+                                <p className="text-xs text-slate-400">No pincodes yet</p>
+                                <p className="text-[11px] text-slate-300 mt-1">Click + to add pincodes</p>
+                              </div>
+                            ) : (
+                              <div className="divide-y divide-slate-100">
+                                {(selectedPod.pincodes || []).map(pin => (
+                                  <button
+                                    key={pin}
+                                    type="button"
+                                    onClick={() => setSelectedPincode(pin)}
+                                    className={`w-full text-left px-4 py-3 transition-colors ${
+                                      selectedPincode === pin ? 'bg-orange-50' : 'hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <MapPin size={12} className={selectedPincode === pin ? 'text-orange-500' : 'text-slate-400'} />
+                                        <span className={`text-sm font-medium ${selectedPincode === pin ? 'text-orange-700' : 'text-slate-800'}`}>{pin}</span>
+                                      </div>
+                                      {selectedPincode === pin && (
+                                        <span className="text-[10px] font-semibold text-orange-500 bg-orange-100 rounded-full px-2 py-0.5">Selected</span>
+                                      )}
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      {/* Selected Pincode Footer */}
+                      {selectedPincode && (
+                        <div className="border-t border-slate-200 bg-orange-50/70 px-4 py-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Selected Pincode</p>
+                          <div className="flex items-center justify-between rounded-lg border border-orange-200 bg-white px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <MapPin size={13} className="text-orange-500" />
+                              <span className="text-sm font-bold text-orange-700">{selectedPincode}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedPincode('')}
+                              className="text-slate-400 hover:text-red-500 transition-colors"
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2057,214 +2518,7 @@ export default function ClientPortal() {
         </section>
       </main>
 
-      {/* Contact View Modal */}
-      {contactViewItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setContactViewItem(null)}>
-          <div className="relative w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-              <div className="flex items-center gap-3">
-                {contactViewItem.logoKey
-                  ? <ContactLogo logoKey={contactViewItem.logoKey} token={token} size="lg" />
-                  : <div className="w-12 h-12 rounded-full bg-orange-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
-                      <span className="text-orange-600 text-sm font-bold">{(contactViewItem.name || '?').slice(0,2).toUpperCase()}</span>
-                    </div>
-                }
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900">{contactViewItem.name}</h2>
-                  <p className="text-xs text-slate-500">{contactViewItem.company || '—'}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${{ client: 'bg-orange-100 text-orange-600', lead: 'bg-blue-100 text-blue-700', partner: 'bg-amber-100 text-amber-700' }[contactViewItem.type] || 'bg-slate-100 text-slate-600'}`}>{contactViewItem.type}</span>
-                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${pill(contactViewItem.status)}`}>{contactViewItem.status}</span>
-                <button type="button" onClick={() => setContactViewItem(null)} className="ml-2 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
-              </div>
-            </div>
 
-            <div className="max-h-[70vh] overflow-y-auto px-5 py-4 space-y-5">
-
-              {/* Business */}
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Business Information</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {contactViewItem.logoKey && (
-                    <div className="col-span-2 flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2">
-                      <ContactLogo logoKey={contactViewItem.logoKey} token={token} size="xl" />
-                      <div>
-                        <p className="text-xs text-slate-400">Business Logo</p>
-                        <p className="text-sm font-medium text-slate-800 mt-0.5">{contactViewItem.name}</p>
-                      </div>
-                    </div>
-                  )}
-                  {[
-                    ['Full Name', contactViewItem.name],
-                    ['Company', contactViewItem.company],
-                    ['Business Type', contactViewItem.businessType],
-                    ['Category', contactViewItem.category],
-                    ['Sub Category', contactViewItem.subCategory],
-                    ['Website', contactViewItem.websiteUrl],
-                    ['GST Number', contactViewItem.gstNumber],
-                    ['PAN Number', contactViewItem.panNumber],
-                  ].map(([l, v]) => v ? (
-                    <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
-                      <p className="text-xs text-slate-400">{l}</p>
-                      <p className="text-sm font-medium text-slate-800 mt-0.5 break-all">{v}</p>
-                    </div>
-                  ) : null)}
-                </div>
-              </div>
-
-              {/* Contact */}
-              <div className="border-t border-slate-100 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Contact Details</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    ['Email', contactViewItem.email],
-                    ['Mobile', contactViewItem.mobile],
-                    ['Alternate Mobile', contactViewItem.alternateMobile],
-                  ].map(([l, v]) => v ? (
-                    <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
-                      <p className="text-xs text-slate-400">{l}</p>
-                      <p className="text-sm font-medium text-slate-800 mt-0.5">{v}</p>
-                    </div>
-                  ) : null)}
-                </div>
-              </div>
-
-              {/* Location */}
-              {(contactViewItem.city || contactViewItem.address || contactViewItem.state) && (
-                <div className="border-t border-slate-100 pt-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Location</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[
-                      ['Address', contactViewItem.address],
-                      ['City', contactViewItem.city],
-                      ['State', contactViewItem.state],
-                      ['Pincode', contactViewItem.pincode],
-                      ['Country', contactViewItem.country],
-                    ].map(([l, v]) => v ? (
-                      <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
-                        <p className="text-xs text-slate-400">{l}</p>
-                        <p className="text-sm font-medium text-slate-800 mt-0.5">{v}</p>
-                      </div>
-                    ) : null)}
-                  </div>
-                </div>
-              )}
-
-              {/* Territory */}
-              {(contactViewItem.territory?.stateName || contactViewItem.stateName) && (
-                <div className="border-t border-slate-100 pt-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Territory Assignment</p>
-                  <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3">
-                    <p className="text-sm font-medium text-slate-800">
-                      {contactViewItem.territory?.stateName || contactViewItem.stateName} →{' '}
-                      {contactViewItem.territory?.cityName || contactViewItem.cityName} →{' '}
-                      {contactViewItem.territory?.regionName || contactViewItem.region} Region →{' '}
-                      {contactViewItem.territory?.podNumber || contactViewItem.podNumber}
-                    </p>
-                    {(contactViewItem.territory?.podName || contactViewItem.podName) && (
-                      <p className="text-xs text-slate-500 mt-1">
-                        POD: {contactViewItem.territory?.podName || contactViewItem.podName}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* CRM / MBC */}
-              {(contactViewItem.type || contactViewItem.mbcSubCategory) && (
-                <div className="border-t border-slate-100 pt-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">CRM Details</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[
-                      ['MBC Type', contactViewItem.type],
-                      ['MBC Sub Category', contactViewItem.mbcSubCategory],
-                      ['Status', contactViewItem.status],
-                      ['Created At', contactViewItem.createdAt ? new Date(contactViewItem.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : null],
-                    ].map(([l, v]) => v ? (
-                      <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
-                        <p className="text-xs text-slate-400">{l}</p>
-                        <p className="text-sm font-medium text-slate-800 mt-0.5 capitalize">{v}</p>
-                      </div>
-                    ) : null)}
-                  </div>
-                </div>
-              )}
-
-              {/* Social */}
-              {(contactViewItem.instagramUrl || contactViewItem.facebookUrl || contactViewItem.youtubeUrl) && (
-                <div className="border-t border-slate-100 pt-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Social / Online Presence</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[
-                      ['Instagram', contactViewItem.instagramUrl],
-                      ['Facebook', contactViewItem.facebookUrl],
-                      ['YouTube', contactViewItem.youtubeUrl],
-                    ].map(([l, v]) => v ? (
-                      <div key={l} className="bg-slate-50 rounded-lg px-3 py-2">
-                        <p className="text-xs text-slate-400">{l}</p>
-                        <a href={v} target="_blank" rel="noreferrer" className="text-sm font-medium text-orange-500 hover:underline mt-0.5 block truncate">{v}</a>
-                      </div>
-                    ) : null)}
-                  </div>
-                </div>
-              )}
-
-              {/* Notes */}
-              {contactViewItem.notes && (
-                <div className="border-t border-slate-100 pt-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Notes</p>
-                  <p className="text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2 whitespace-pre-wrap">{contactViewItem.notes}</p>
-                </div>
-              )}
-
-              {/* KYC Status */}
-              <div className="border-t border-slate-100 pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">KYC Status</p>
-                <div className="flex items-center gap-3">
-                  <span className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize ${
-                    contactViewItem.kyc === 'verified' ? 'bg-emerald-100 text-emerald-700' :
-                    contactViewItem.kyc === 'rejected' ? 'bg-red-100 text-red-700' :
-                    'bg-amber-100 text-amber-700'
-                  }`}>
-                    {contactViewItem.kyc || 'pending'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
-              <button type="button" disabled={contactKycLoading !== null} onClick={async () => {
-                try {
-                  setContactKycLoading('verified')
-                  await api(`/api/business/contacts/${contactViewItem.id}/kyc`, { token, method: 'PATCH', body: { kyc: 'verified' } })
-                  await loadTabCollection('contacts')
-                  setContactViewItem(prev => ({ ...prev, kyc: 'verified' }))
-                } catch (err) { setError(err.message || 'KYC update failed') }
-                finally { setContactKycLoading(null) }
-              }} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 px-4 py-1.5 text-sm font-medium text-white">
-                {contactKycLoading === 'verified' ? <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : '✓'} Verify KYC
-              </button>
-              <button type="button" disabled={contactKycLoading !== null} onClick={async () => {
-                try {
-                  setContactKycLoading('rejected')
-                  await api(`/api/business/contacts/${contactViewItem.id}/kyc`, { token, method: 'PATCH', body: { kyc: 'rejected' } })
-                  await loadTabCollection('contacts')
-                  setContactViewItem(prev => ({ ...prev, kyc: 'rejected' }))
-                } catch (err) { setError(err.message || 'KYC update failed') }
-                finally { setContactKycLoading(null) }
-              }} className="inline-flex items-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-60 px-4 py-1.5 text-sm font-medium text-white">
-                {contactKycLoading === 'rejected' ? <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : '✗'} Reject KYC
-              </button>
-              <button type="button" disabled={contactKycLoading !== null} onClick={() => { setContactViewItem(null); openContactEdit(contactViewItem) }} className="rounded-lg bg-gradient-to-r from-[#FF7A00] to-[#FFB000] px-4 py-1.5 text-sm font-medium text-white hover:from-[#e06e00] hover:to-[#e6a000] disabled:opacity-60">Edit</button>
-              <button type="button" disabled={contactKycLoading !== null} onClick={() => setContactViewItem(null)} className="rounded-lg border border-slate-200 px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60">Close</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Dedicated Contacts Modal */}
       {contactModal.open && (

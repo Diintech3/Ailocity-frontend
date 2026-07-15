@@ -241,6 +241,8 @@ export default function ClientDashboard() {
   const stats = dash?.stats || {}
   const agents = dash?.agents || []
   const tickets = dash?.tickets || []
+  const recentLeads = dash?.recentLeads || []
+  const recentCampaigns = dash?.recentCampaigns || []
   const initials = (me?.businessName || me?.fullName || 'C').slice(0, 2).toUpperCase()
 
   return (
@@ -410,12 +412,14 @@ export default function ClientDashboard() {
           {/* Overview */}
           {!loading && active === 'overview' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                 {[
-                  { label: 'Total Calls',   value: stats.totalCalls ?? 0,   icon: PhoneCall,  color: 'text-blue-600 bg-blue-50' },
-                  { label: 'Active Agents', value: stats.activeAgents ?? 0, icon: Bot,        color: 'text-orange-500 bg-orange-50' },
-                  { label: 'Open Tickets',  value: stats.openTickets ?? 0,  icon: Ticket,     color: 'text-amber-600 bg-amber-50' },
-                  { label: 'Credits Left',  value: stats.creditsLeft ?? 0,  icon: CreditCard, color: 'text-emerald-600 bg-emerald-50' },
+                  { label: 'Total Calls',      value: stats.totalCalls ?? 0,      icon: PhoneCall,  color: 'text-blue-600 bg-blue-50' },
+                  { label: 'Active Agents',    value: stats.activeAgents ?? 0,    icon: Bot,        color: 'text-orange-500 bg-orange-50' },
+                  { label: 'Credits Left',     value: stats.creditsLeft ?? 0,     icon: CreditCard, color: 'text-emerald-600 bg-emerald-50' },
+                  { label: 'Open Tickets',     value: stats.openTickets ?? 0,     icon: Ticket,     color: 'text-amber-600 bg-amber-50' },
+                  { label: 'Total Leads',      value: stats.totalLeads ?? 0,      icon: Users,      color: 'text-violet-600 bg-violet-50' },
+                  { label: 'Total Campaigns',  value: stats.totalCampaigns ?? 0,  icon: Megaphone,  color: 'text-pink-600 bg-pink-50' },
                 ].map(s => (
                   <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-3">
@@ -456,6 +460,65 @@ export default function ClientDashboard() {
                       </div>
                     ))
                   }
+                </div>
+              </div>
+
+              {/* Recent Leads */}
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-slate-100 font-semibold text-sm text-slate-800">Recent Leads</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        {['Name', 'Email', 'Source', 'Requirement', 'Status', 'Priority'].map(h => (
+                          <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {recentLeads.length === 0 ? (
+                        <tr><td colSpan={6} className="px-6 py-8 text-center text-sm text-slate-400">No recent leads found</td></tr>
+                      ) : recentLeads.map(l => (
+                        <tr key={l.id} className="hover:bg-slate-50/70">
+                          <td className="px-4 py-3 text-sm font-medium text-slate-800">{l.name || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600">{l.email || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600">{l.source || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600 max-w-[160px] truncate">{l.requirement || '—'}</td>
+                          <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${pill(l.status)}`}>{l.status || '—'}</span></td>
+                          <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${pill(l.priority)}`}>{l.priority || '—'}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Recent Campaigns */}
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-slate-100 font-semibold text-sm text-slate-800">Recent Campaigns</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        {['Name', 'Type', 'Platform', 'Budget', 'Status'].map(h => (
+                          <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {recentCampaigns.length === 0 ? (
+                        <tr><td colSpan={5} className="px-6 py-8 text-center text-sm text-slate-400">No recent campaigns found</td></tr>
+                      ) : recentCampaigns.map(c => (
+                        <tr key={c.id} className="hover:bg-slate-50/70">
+                          <td className="px-4 py-3 text-sm font-medium text-slate-800">{c.name || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600 capitalize">{c.type || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600">{c.platform || '—'}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-slate-900">{c.budget ? `₹${c.budget}` : '—'}</td>
+                          <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${pill(c.status)}`}>{c.status || '—'}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -1233,9 +1296,6 @@ export default function ClientDashboard() {
                     </div>
                     <h3 className="text-slate-900 font-semibold text-sm">{tool.label}</h3>
                     <p className="text-slate-500 text-xs mt-1.5 leading-relaxed">{tool.desc}</p>
-                    <div className="mt-4">
-                      <span className="inline-flex items-center text-xs font-medium px-3 py-1 rounded-full" style={{background:'linear-gradient(135deg,#FF7A00,#FFB000)',color:'white'}}>Coming Soon</span>
-                    </div>
                   </div>
                 ))}
               </div>
