@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, TOKEN_CLIENT, TOKEN_BD, TOKEN_SUBCLIENT, TOKEN_TC } from '../../lib/api'
+import { api, TOKEN_CLIENT, TOKEN_BD, TOKEN_SUBCLIENT, TOKEN_TC, TOKEN_PM, TOKEN_ELECTION } from '../../lib/api'
 
 // appId → which token key and which dashboard URL
 const APP_ROUTING = {
@@ -8,10 +8,12 @@ const APP_ROUTING = {
   'ailocity':          { tokenKey: TOKEN_CLIENT,  path: '/client/portal' },
   'ailocity-business': { tokenKey: TOKEN_CLIENT,  path: '/client/portal' },
   'ailocity-tc':       { tokenKey: TOKEN_CLIENT,  path: '/client/portal' },
+  'ailocity-pm':       { tokenKey: TOKEN_PM,      path: '/pm/dashboard'  },
+  'ailocity-election': { tokenKey: TOKEN_ELECTION,  path: '/election/dashboard' },
 }
 
 // All other tokens to clear when logging in with a specific app
-const ALL_TOKENS = [TOKEN_CLIENT, TOKEN_BD, TOKEN_SUBCLIENT, TOKEN_TC]
+const ALL_TOKENS = [TOKEN_CLIENT, TOKEN_BD, TOKEN_SUBCLIENT, TOKEN_TC, TOKEN_PM, TOKEN_ELECTION]
 
 export default function ClientLogin() {
   const [apps, setApps] = useState([])

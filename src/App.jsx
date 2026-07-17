@@ -11,7 +11,8 @@ import BDDashboard from './pages/bd/Dashboard'
 import BDLogin from './pages/bd/Login'
 import TCDashboard from './pages/tc/Dashboard'
 import PMDashboard from './pages/pm/Dashboard'
-import { TOKEN_SUPERADMIN, TOKEN_ADMIN, TOKEN_CLIENT, TOKEN_BD, TOKEN_TC, TOKEN_SUBCLIENT, TOKEN_PM } from './lib/api'
+import ElectionDashboard from './pages/election/Dashboard'
+import { TOKEN_SUPERADMIN, TOKEN_ADMIN, TOKEN_CLIENT, TOKEN_BD, TOKEN_TC, TOKEN_SUBCLIENT, TOKEN_PM, TOKEN_ELECTION } from './lib/api'
 
 function tcToken() {
   const t = localStorage.getItem(TOKEN_TC)
@@ -89,6 +90,14 @@ function App() {
         <Route path="/pm/dashboard" element={
           <Guard tokenKey={TOKEN_PM} fallback="/client/login">
             <PMDashboard />
+          </Guard>
+        } />
+
+        {/* Ailocity Election */}
+        <Route path="/election/login" element={<Navigate to="/client/login" replace />} />
+        <Route path="/election/dashboard" element={
+          <Guard tokenKey={TOKEN_ELECTION} fallback="/client/login">
+            <ElectionDashboard />
           </Guard>
         } />
       </Routes>

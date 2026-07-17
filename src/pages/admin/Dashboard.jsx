@@ -19,7 +19,7 @@ import {
   Menu,
   ChevronDown,
 } from 'lucide-react'
-import { api, TOKEN_ADMIN, TOKEN_CLIENT, TOKEN_BD, TOKEN_TC, TOKEN_PM } from '../../lib/api'
+import { api, TOKEN_ADMIN, TOKEN_CLIENT, TOKEN_BD, TOKEN_TC, TOKEN_PM, TOKEN_ELECTION } from '../../lib/api'
 
 function LogoImage({ logoKey, token }) {
   const [url, setUrl] = useState(null)
@@ -597,6 +597,9 @@ export default function AdminDashboard() {
                                     } else if (client.appId === 'ailocity-business') {
                                       localStorage.setItem(TOKEN_CLIENT, res.token)
                                       window.open('/client/portal', '_blank')
+                                    } else if (client.appId === 'ailocity-election') {
+                                      localStorage.setItem(TOKEN_ELECTION, res.token)
+                                      window.open('/election/dashboard', '_blank')
                                     } else {
                                       // ailocity or ailocity-tc fallback — check business name
                                       const isTc = (client.business || '').toLowerCase().includes('tc')

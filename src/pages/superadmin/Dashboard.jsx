@@ -16,7 +16,7 @@ import {
   ChevronDown,
   Building2,
 } from 'lucide-react'
-import { api, TOKEN_SUPERADMIN } from '../../lib/api'
+import { api, TOKEN_SUPERADMIN, TOKEN_CLIENT, TOKEN_BD, TOKEN_TC, TOKEN_PM, TOKEN_ELECTION } from '../../lib/api'
 
 const NAV = [
   { icon: LayoutDashboard, label: 'Overview',  id: 'overview' },
@@ -560,9 +560,23 @@ export default function SuperadminDashboard() {
                         <td className="px-6 py-3.5">
                           <button type="button" onClick={async () => {
                               try {
-                                const res = await api(`/api/superadmin/apps/${app.id}/impersonate`, { method: 'POST', token })
-                                localStorage.setItem('ailocity_token_client', res.token)
-                                window.open('/client/portal', '_blank')
+                                 const res = await api(`/api/superadmin/apps/${app.id}/impersonate`, { method: 'POST', token })
+                                 if (app.id === 'ailocity-pm') {
+                                   localStorage.setItem(TOKEN_PM, res.token)
+                                   window.open('/pm/dashboard', '_blank')
+                                 } else if (app.id === 'ailocity-bd') {
+                                   localStorage.setItem(TOKEN_BD, res.token)
+                                   window.open('/bd/dashboard', '_blank')
+                                 } else if (app.id === 'ailocity-tc') {
+                                   localStorage.setItem(TOKEN_TC, res.token)
+                                   window.open('/tc/dashboard', '_blank')
+                                 } else if (app.id === 'ailocity-election') {
+                                   localStorage.setItem(TOKEN_ELECTION, res.token)
+                                   window.open('/election/dashboard', '_blank')
+                                 } else {
+                                   localStorage.setItem(TOKEN_CLIENT, res.token)
+                                   window.open('/client/portal', '_blank')
+                                 }
                               } catch (err) { alert(err.message || 'Login failed') }
                             }}
                             className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">Login</button>
