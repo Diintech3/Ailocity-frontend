@@ -3,7 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, HelpCircle, Settings as SettingsIcon,
   Menu, ChevronDown, ChevronRight, LogOut, AlertCircle, HelpCircle as HelpIcon,
-  UserCheck, Navigation, Map
+  UserCheck, Navigation, Map, Shield, Activity
 } from 'lucide-react'
 import { api, TOKEN_ELECTION, TOKEN_CLIENT } from '../../lib/api'
 import CandidatesTab from './components/CandidatesTab'
@@ -12,11 +12,12 @@ import RoutesTab from './components/RoutesTab'
 import MapTab from './components/MapTab'
 
 const TABS = [
-  { id: 'overview',   label: 'Overview',     icon: LayoutDashboard },
-  { id: 'candidates', label: 'Candidates',   icon: Users },
-  { id: 'volunteers', label: 'Volunteers',   icon: UserCheck },
-  { id: 'routes',     label: 'Routes',       icon: Navigation },
-  { id: 'map',        label: 'Ailocity Map', icon: Map },
+  { id: 'overview',   label: 'Overview',           icon: LayoutDashboard },
+  { id: 'candidates', label: 'Candidates',         icon: Users },
+  { id: 'volunteers', label: 'Volunteers',         icon: UserCheck },
+  { id: 'routes',     label: 'Routes',             icon: Navigation },
+  { id: 'map',        label: 'Ailocity Map',       icon: Map },
+  { id: 'simulator',  label: 'Telemetry Simulator', icon: Activity },
 ]
 
 const BOTTOM_TABS = [
@@ -35,6 +36,7 @@ export default function ElectionDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [dropOpen, setDropOpen] = useState(false)
+  const [simSubTab, setSimSubTab] = useState('map') // 'map' | 'volunteers' | 'routes'
 
   // Fetch election context and candidates list
   const loadData = async () => {
@@ -274,22 +276,74 @@ export default function ElectionDashboard() {
 
               {/* Candidates Tab Content */}
               {active === 'candidates' && (
-                <CandidatesTab token={token} onCandidatesChange={setCandidates} />
+                <CandidatesTab token={token} onCandidatesChange={setCandidates} mode="real" />
               )}
 
               {/* Volunteers Tab Content */}
               {active === 'volunteers' && (
-                <VolunteersTab token={token} />
+                <VolunteersTab token={token} mode="real" />
               )}
 
               {/* Routes Tab Content */}
               {active === 'routes' && (
-                <RoutesTab token={token} />
+                <RoutesTab token={token} mode="real" />
               )}
 
               {/* Map Tab Content */}
               {active === 'map' && (
-                <MapTab token={token} />
+                <MapTab token={token} mode="real" />
+              )}
+
+              {/* Telemetry Simulator Hub Tab Content */}
+              {active === 'simulator' && (
+                <div className="space-y-6">
+                  {/* Premium Inner Tabs Subbar */}
+                  <div className="flex border-b border-orange-200 gap-1 bg-orange-50/20 p-1.5 rounded-2xl border">
+                    <button
+                      onClick={() => setSimSubTab('map')}
+                      className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${
+                        simSubTab === 'map'
+                          ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-md'
+                          : 'text-slate-600 hover:bg-orange-50 hover:text-slate-800'
+                      }`}
+                    >
+                      📟 Simulator Map & Stream
+                    </button>
+                    <button
+                      onClick={() => setSimSubTab('volunteers')}
+                      className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${
+                        simSubTab === 'volunteers'
+                          ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-md'
+                          : 'text-slate-600 hover:bg-orange-50 hover:text-slate-800'
+                      }`}
+                    >
+                      👥 Mock Volunteers
+                    </button>
+                    <button
+                      onClick={() => setSimSubTab('routes')}
+                      className={`px-5 py-2 text-xs font-bold rounded-xl transition-all duration-200 ${
+                        simSubTab === 'routes'
+                          ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-md'
+                          : 'text-slate-600 hover:bg-orange-50 hover:text-slate-800'
+                      }`}
+                    >
+                      📍 Mock Routes
+                    </button>
+                  </div>
+
+                  {/* Render Simulator Sub-tab content */}
+                  <div className="pt-2">
+                    {simSubTab === 'map' && (
+                      <MapTab token={token} mode="simulator" />
+                    )}
+                    {simSubTab === 'volunteers' && (
+                      <VolunteersTab token={token} mode="simulator" />
+                    )}
+                    {simSubTab === 'routes' && (
+                      <RoutesTab token={token} mode="simulator" />
+                    )}
+                  </div>
+                </div>
               )}
 
               {/* Help Tab Content */}

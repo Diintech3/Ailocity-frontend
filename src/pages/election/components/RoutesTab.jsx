@@ -67,7 +67,7 @@ function ActionsDropdown({ onView, onEdit, onAssign, onDelete }) {
   )
 }
 
-export default function RoutesTab({ token }) {
+export default function RoutesTab({ token, mode: dashboardMode }) {
   const [routes, setRoutes] = useState([])
   const [volunteers, setVolunteers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -86,8 +86,8 @@ export default function RoutesTab({ token }) {
       setLoading(true)
       setError('')
       const [rteRes, volRes] = await Promise.all([
-        api('/api/election-campaign/routes', { token }),
-        api('/api/election-campaign/volunteers', { token })
+        api(`/api/election-campaign/routes?mode=${dashboardMode}`, { token }),
+        api(`/api/election-campaign/volunteers?mode=${dashboardMode}`, { token })
       ])
       setRoutes(rteRes.routes || [])
       setVolunteers(volRes.volunteers || [])
@@ -96,7 +96,7 @@ export default function RoutesTab({ token }) {
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [token, dashboardMode])
 
   useEffect(() => {
     loadData()
@@ -177,7 +177,7 @@ export default function RoutesTab({ token }) {
           const res = await api('/api/election-campaign/routes', {
             method: 'POST',
             token,
-            body: form
+            body: { ...form, isSimulated: dashboardMode === 'simulator' }
           })
           savedRoute = res.route
           setRoutes(prev => [...prev, savedRoute])

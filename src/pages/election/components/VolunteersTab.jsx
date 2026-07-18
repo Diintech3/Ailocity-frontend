@@ -57,7 +57,7 @@ function ActionsDropdown({ onView, onEdit, onAssign, onDelete }) {
   )
 }
 
-export default function VolunteersTab({ token }) {
+export default function VolunteersTab({ token, mode: dashboardMode }) {
   const [volunteers, setVolunteers] = useState([])
   const [routes, setRoutes] = useState([])
   const [loading, setLoading] = useState(true)
@@ -76,8 +76,8 @@ export default function VolunteersTab({ token }) {
       setLoading(true)
       setError('')
       const [volRes, rteRes] = await Promise.all([
-        api('/api/election-campaign/volunteers', { token }),
-        api('/api/election-campaign/routes', { token })
+        api(`/api/election-campaign/volunteers?mode=${dashboardMode}`, { token }),
+        api(`/api/election-campaign/routes?mode=${dashboardMode}`, { token })
       ])
       setVolunteers(volRes.volunteers || [])
       setRoutes(rteRes.routes || [])
@@ -86,7 +86,7 @@ export default function VolunteersTab({ token }) {
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [token, dashboardMode])
 
   useEffect(() => {
     loadData()
@@ -148,7 +148,7 @@ export default function VolunteersTab({ token }) {
         const res = await api('/api/election-campaign/volunteers', {
           method: 'POST',
           token,
-          body: form
+          body: { ...form, isSimulated: dashboardMode === 'simulator' }
         })
         const created = res.volunteer
         setVolunteers(prev => [...prev, created])

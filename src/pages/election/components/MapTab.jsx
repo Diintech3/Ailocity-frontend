@@ -38,7 +38,7 @@ const stopIcon = L.divIcon({
   iconAnchor: [7, 7]
 })
 
-export default function MapTab({ token }) {
+export default function MapTab({ token, mode: dashboardMode }) {
   const [volunteers, setVolunteers] = useState([])
   const [routes, setRoutes] = useState([])
   const [surveys, setSurveys] = useState([])
@@ -46,6 +46,11 @@ export default function MapTab({ token }) {
   const [simulating, setSimulating] = useState(true)
   const [selectedVol, setSelectedVol] = useState(null)
   
+  // Simulator Controls
+  const [simSpeed, setSimSpeed] = useState(4500) // Telemetry speed in ms
+  const [surveyRate, setSurveyRate] = useState(0.4) // Probability of auto-generating survey per step
+  const [showSimControls, setShowSimControls] = useState(true)
+
   // D2D Filters
   const [filterSupport, setFilterSupport] = useState('all')
   const [filterIssue, setFilterIssue] = useState('all')
@@ -72,9 +77,9 @@ export default function MapTab({ token }) {
   const loadData = useCallback(async () => {
     try {
       const [volRes, rteRes, srvRes] = await Promise.all([
-        api('/api/election-campaign/volunteers', { token }),
-        api('/api/election-campaign/routes', { token }),
-        api('/api/election-campaign/surveys', { token })
+        api(`/api/election-campaign/volunteers?mode=${dashboardMode}`, { token }),
+        api(`/api/election-campaign/routes?mode=${dashboardMode}`, { token }),
+        api(`/api/election-campaign/surveys?mode=${dashboardMode}`, { token })
       ])
       setVolunteers(volRes.volunteers || [])
       setRoutes(rteRes.routes || [])
@@ -84,15 +89,15 @@ export default function MapTab({ token }) {
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [token, dashboardMode])
 
   useEffect(() => {
     loadData()
   }, [loadData])
 
-  // Simulation Engine: Triggers mock-location update on backend every 4 seconds
+  // Simulation Engine: Triggers mock-location update on backend every `simSpeed` milliseconds
   useEffect(() => {
-    if (!simulating) return
+    if (dashboardMode !== 'simulator' || !simulating) return
     const interval = setInterval(async () => {
       try {
         // 1. Trigger backend path movement calculation
@@ -101,7 +106,7 @@ export default function MapTab({ token }) {
         // 2. Mock D2D log submissions automatically for moving volunteers
         // Select an active volunteer at random who has an assigned route
         const activeVols = volunteers.filter(v => v.status === 'active' && v.assignedRouteId)
-        if (activeVols.length > 0 && Math.random() > 0.4) {
+        if (activeVols.length > 0 && Math.random() < surveyRate) {
           const luckyVol = activeVols[Math.floor(Math.random() * activeVols.length)]
           const targetRoute = routes.find(r => r.id === luckyVol.assignedRouteId)
           if (targetRoute) {
@@ -125,7 +130,8 @@ export default function MapTab({ token }) {
                 keyIssue: randomIss,
                 candidateVisitRequired: Math.random() > 0.7 ? 'Yes' : 'No',
                 wantsWhatsappUpdates: Math.random() > 0.5 ? 'Yes' : 'No',
-                gpsLocation: luckyVol.lastKnownLocation || { lat: 26.8467, lng: 80.9462 }
+                gpsLocation: luckyVol.lastKnownLocation || { lat: 26.8467, lng: 80.9462 },
+                isSimulated: true
               }
             })
           }
@@ -136,10 +142,10 @@ export default function MapTab({ token }) {
       } catch (err) {
         console.error('Simulation step error:', err)
       }
-    }, 4500)
+    }, simSpeed)
     
     return () => clearInterval(interval)
-  }, [simulating, volunteers, routes, token, loadData])
+  }, [simulating, volunteers, routes, token, loadData, dashboardMode, simSpeed, surveyRate])
 
   // Seeding Mock Data if empty
   const handleSetupMockData = async () => {
@@ -160,7 +166,8 @@ export default function MapTab({ token }) {
             { lat: 26.8550, lng: 80.9160 },
             { lat: 26.8530, lng: 80.9200 },
             { lat: 26.8580, lng: 80.9250 }
-          ]
+          ],
+          isSimulated: true
         }
       })
       
@@ -177,7 +184,8 @@ export default function MapTab({ token }) {
             { lat: 26.8480, lng: 80.9510 },
             { lat: 26.8510, lng: 80.9540 },
             { lat: 26.8540, lng: 80.9580 }
-          ]
+          ],
+          isSimulated: true
         }
       })
       
@@ -192,7 +200,8 @@ export default function MapTab({ token }) {
           politicalParty: 'Ailocity Election Party',
           vidhanSabha: 'Lucknow Central',
           boothNumber: 'Booth 12',
-          lastKnownLocation: { lat: 26.8520, lng: 80.9120, index: 0, direction: 1, updatedAt: new Date().toISOString() }
+          lastKnownLocation: { lat: 26.8520, lng: 80.9120, index: 0, direction: 1, updatedAt: new Date().toISOString() },
+          isSimulated: true
         }
       })
 
@@ -206,7 +215,8 @@ export default function MapTab({ token }) {
           politicalParty: 'Ailocity Election Party',
           vidhanSabha: 'Lucknow Central',
           boothNumber: 'Booth 18',
-          lastKnownLocation: { lat: 26.8467, lng: 80.9462, index: 0, direction: 1, updatedAt: new Date().toISOString() }
+          lastKnownLocation: { lat: 26.8467, lng: 80.9462, index: 0, direction: 1, updatedAt: new Date().toISOString() },
+          isSimulated: true
         }
       })
       
@@ -234,6 +244,21 @@ export default function MapTab({ token }) {
     }
   }
 
+  const handleClearSimulatorData = async () => {
+    if (!confirm('Are you sure you want to delete all simulated routes, volunteers, and survey logs?')) return
+    try {
+      setLoading(true)
+      await api('/api/election-campaign/simulation/clear', { method: 'POST', token })
+      setSuccess('Simulated telemetry database successfully purged!')
+      setTimeout(() => setSuccess(''), 3000)
+      await loadData()
+    } catch (err) {
+      setError(err.message || 'Failed to clear simulated data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleManualSurveySubmit = async (e) => {
     e.preventDefault()
     if (!surveyForm.routeId || !surveyForm.houseNumber || !surveyForm.headName) {
@@ -251,7 +276,8 @@ export default function MapTab({ token }) {
         token,
         body: {
           ...surveyForm,
-          gpsLocation: mockLoc
+          gpsLocation: mockLoc,
+          isSimulated: dashboardMode === 'simulator'
         }
       })
       
@@ -318,35 +344,48 @@ export default function MapTab({ token }) {
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
         <div>
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-            <Activity size={18} className="text-orange-500 animate-pulse" /> Live Tracking Map & Survey Stream
+            <Activity size={18} className={`${dashboardMode === 'simulator' ? 'text-orange-500 animate-pulse' : 'text-emerald-500'}`} />
+            {dashboardMode === 'simulator' ? 'Live Telemetry Map & Survey Simulator' : 'Live Tracking Map & Survey Stream'}
           </h3>
-          <p className="text-xs text-slate-400 font-medium">Track volunteers live on the map and view incoming campaign responses.</p>
+          <p className="text-xs text-slate-400 font-medium">
+            {dashboardMode === 'simulator'
+              ? 'Track mock volunteers live on the map and configure telemetry generators.'
+              : 'Monitor real active volunteers live on the map and view submitted field visits.'}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2 w-full lg:w-auto">
-          {routes.length === 0 && (
+          {dashboardMode === 'simulator' && routes.length === 0 && (
             <button
               onClick={handleSetupMockData}
               className="bg-orange-50 text-[#FF7A00] border border-orange-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-orange-100 transition-colors"
             >
-              🚀 Click to Setup Mock Map Data
+              🚀 Setup Simulator Seeds
             </button>
           )}
-          <button
-            onClick={() => setSimulating(p => !p)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm ${
-              simulating ? 'bg-[#FF7A00] text-white hover:bg-[#e06e00]' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            {simulating ? (
-              <>
-                <Pause size={14} /> Pause Mock Walking
-              </>
-            ) : (
-              <>
-                <Play size={14} /> Start Mock Walking
-              </>
-            )}
-          </button>
+          {dashboardMode === 'simulator' && (
+            <button
+              onClick={() => setSimulating(p => !p)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm ${
+                simulating ? 'bg-[#FF7A00] text-white hover:bg-[#e06e00]' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              {simulating ? (
+                <>
+                  <Pause size={14} /> Pause Mock Walking
+                </>
+              ) : (
+                <>
+                  <Play size={14} /> Start Mock Walking
+                </>
+              )}
+            </button>
+          )}
+          {dashboardMode === 'real' && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50/50 text-emerald-800 text-xs font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Live Database Active
+            </div>
+          )}
           <button
             onClick={() => setSurveyModal(true)}
             className="bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5"
@@ -421,6 +460,123 @@ export default function MapTab({ token }) {
 
           {/* Campaign Feeds & Filters */}
           <div className="xl:col-span-1 flex flex-col bg-white rounded-2xl border border-slate-100 shadow-sm p-4 overflow-hidden h-full min-h-0">
+            {/* Simulator Control Center (Only shown in Simulator Mode) */}
+            {dashboardMode === 'simulator' && (
+              <div className="border border-orange-100 bg-orange-50/30 rounded-xl p-3 mb-4 space-y-3 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowSimControls(!showSimControls)}
+                  className="flex items-center justify-between w-full text-left font-extrabold text-xs text-orange-700 uppercase tracking-wider focus:outline-none"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Activity size={14} className="text-orange-500 animate-pulse" />
+                    Simulator Engine
+                  </span>
+                  <span>{showSimControls ? 'Collapse ▲' : 'Expand ▼'}</span>
+                </button>
+
+                {showSimControls && (
+                  <div className="space-y-2.5 pt-1 text-[11px] font-semibold text-slate-600">
+                    {/* Speed Selector */}
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Telemetry Speed</label>
+                      <div className="grid grid-cols-3 gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setSimSpeed(10000)}
+                          className={`py-1 rounded text-center transition-all ${
+                            simSpeed === 10000 ? 'bg-[#FF7A00] text-white shadow-sm font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          Slow (10s)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSimSpeed(4500)}
+                          className={`py-1 rounded text-center transition-all ${
+                            simSpeed === 4500 ? 'bg-[#FF7A00] text-white shadow-sm font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          Norm (4.5s)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSimSpeed(2000)}
+                          className={`py-1 rounded text-center transition-all ${
+                            simSpeed === 2000 ? 'bg-[#FF7A00] text-white shadow-sm font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          Fast (2s)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Survey Generation Rate */}
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">D2D Survey Activity</label>
+                      <div className="grid grid-cols-3 gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setSurveyRate(0.2)}
+                          className={`py-1 rounded text-center transition-all ${
+                            surveyRate === 0.2 ? 'bg-[#FF7A00] text-white shadow-sm font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          Low (20%)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSurveyRate(0.5)}
+                          className={`py-1 rounded text-center transition-all ${
+                            surveyRate === 0.5 ? 'bg-[#FF7A00] text-white shadow-sm font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          Med (50%)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSurveyRate(0.8)}
+                          className={`py-1 rounded text-center transition-all ${
+                            surveyRate === 0.8 ? 'bg-[#FF7A00] text-white shadow-sm font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          High (80%)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Control Actions */}
+                    <div className="pt-1.5 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleClearSimulatorData}
+                        className="py-1.5 px-2 rounded bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-center font-bold"
+                      >
+                        🗑 Clear Sim
+                      </button>
+                      {routes.length === 0 ? (
+                        <button
+                          type="button"
+                          onClick={handleSetupMockData}
+                          className="py-1.5 px-2 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-center font-bold"
+                        >
+                          🌱 Seed Telemetry
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="py-1.5 px-2 rounded bg-slate-100 text-slate-400 border border-slate-200 text-center font-bold cursor-not-allowed"
+                        >
+                          ✓ Telemetry Active
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Filter Toggle Headers */}
             <div className="space-y-3 pb-3 border-b border-slate-100 flex-shrink-0">
               <div className="flex items-center gap-1 text-slate-800 font-bold text-sm">
