@@ -131,10 +131,42 @@ const createSurveyMarker = (status, isDarkMode) => {
   })
 }
 
+// Custom Div Icon for Houses plotted on Map
+const createHouseMarker = (isDarkMode, isAssignedToSelectedRoute = false) => {
+  const fillBg = isDarkMode ? '#1e293b' : '#ffffff'
+  const borderCol = isAssignedToSelectedRoute 
+    ? '#FF7A00' 
+    : (isDarkMode ? '#475569' : '#cbd5e1')
+  const glowShadow = isAssignedToSelectedRoute
+    ? 'box-shadow: 0 0 10px #FF7A00, 0 2px 5px rgba(0,0,0,0.25); border-width: 2.2px;'
+    : 'box-shadow: 0 2px 5px rgba(0,0,0,0.15);'
+  return L.divIcon({
+    html: `
+      <div style="position: relative; width: 24px; height: 24px; border-radius: 8px; background-color: ${fillBg}; border: 2px solid ${borderCol}; ${glowShadow} display: flex; align-items: center; justify-content: center;">
+        <span style="font-size: 11px;">🏠</span>
+        ${isAssignedToSelectedRoute ? '<span style="position: absolute; top: -5px; right: -5px; font-size: 9px; background: #FF7A00; color: white; border-radius: 50%; width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 1px solid white;">✓</span>' : ''}
+      </div>
+    `,
+    className: 'house-marker-icon',
+    iconSize: [24, 24],
+    iconAnchor: [12, 12]
+  })
+}
+
 // Leaflet Map viewport and camera controller
-function MapController({ selectedVol, followMode, routes, fitBoundsTrigger }) {
+function MapController({ selectedVol, followMode, routes, fitBoundsTrigger, mapTarget }) {
   const map = useMap()
   const lastCenterRef = useRef(null)
+
+  // Center/fit map to target coordinate
+  useEffect(() => {
+    if (!map || !mapTarget || !mapTarget.lat || !mapTarget.lng) return
+    try {
+      map.setView([mapTarget.lat, mapTarget.lng], mapTarget.zoom || 15, { animate: true })
+    } catch (e) {
+      console.warn('Map setView error:', e)
+    }
+  }, [map, mapTarget])
 
   // Follow selected volunteer
   useEffect(() => {
@@ -178,6 +210,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
   const [volunteers, setVolunteers] = useState([])
   const [routes, setRoutes] = useState([])
   const [surveys, setSurveys] = useState([])
+  const [houses, setHouses] = useState([])
   const [loading, setLoading] = useState(true)
   const [simulating, setSimulating] = useState(dashboardMode === 'simulator')
   const [selectedVol, setSelectedVol] = useState(null)
@@ -189,6 +222,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
   const [followMode, setFollowMode] = useState(false)
   const [fitBoundsTrigger, setFitBoundsTrigger] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [mapTarget, setMapTarget] = useState(null)
 
   // Sidebar Tabs & Filters
   const [sidebarTab, setSidebarTab] = useState('volunteers') // 'volunteers' | 'surveys'
@@ -223,14 +257,16 @@ export default function MapTab({ token, mode: dashboardMode }) {
   const loadData = useCallback(async () => {
     try {
       setIsRefreshing(true)
-      const [volRes, rteRes, srvRes] = await Promise.all([
+      const [volRes, rteRes, srvRes, hseRes] = await Promise.all([
         api(`/api/election-campaign/volunteers?mode=${dashboardMode}`, { token }),
         api(`/api/election-campaign/routes?mode=${dashboardMode}`, { token }),
-        api(`/api/election-campaign/surveys?mode=${dashboardMode}`, { token })
+        api(`/api/election-campaign/surveys?mode=${dashboardMode}`, { token }),
+        api(`/api/election/houses`, { token })
       ])
       setVolunteers(volRes.volunteers || [])
       setRoutes(rteRes.routes || [])
       setSurveys(srvRes.surveys || [])
+      setHouses(hseRes.houses || [])
     } catch (err) {
       console.error('Failed to load tracking details:', err)
     } finally {
@@ -275,7 +311,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
             const randomSts = feedSts[Math.floor(Math.random() * feedSts.length)]
             const randomIss = feedIss[Math.floor(Math.random() * feedIss.length)]
             
-            await api('/api/election-campaign/surveys', {
+            await api(`/api/election-campaign/surveys?mode=${dashboardMode}`, {
               method: 'POST',
               token,
               body: {
@@ -290,7 +326,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
                 candidateVisitRequired: Math.random() > 0.7 ? 'Yes' : 'No',
                 wantsWhatsappUpdates: Math.random() > 0.5 ? 'Yes' : 'No',
                 gpsLocation: luckyVol.lastKnownLocation || { lat: 26.8467, lng: 80.9462 },
-                isSimulated: true
+                isSimulated: dashboardMode === 'simulator'
               }
             })
           }
@@ -320,6 +356,25 @@ export default function MapTab({ token, mode: dashboardMode }) {
     try {
       setLoading(true)
       const isSim = dashboardMode === 'simulator'
+
+      if (houses.length === 0) {
+        const mockHousesData = [
+          { houseNumber: 'H-101', ownerName: 'Rajesh Kumar', totalVoters: 4, ward: 'Ward 45', lat: '26.8530', lng: '80.9130', notes: 'Supporter family' },
+          { houseNumber: 'H-102', ownerName: 'Suman Lata', totalVoters: 3, ward: 'Ward 45', lat: '26.8540', lng: '80.9170', notes: 'Neutral attitude' },
+          { houseNumber: 'H-103', ownerName: 'Alok Pandey', totalVoters: 5, ward: 'Ward 45', lat: '26.8560', lng: '80.9220', notes: 'Needs candidate visit' },
+          { houseNumber: 'H-201', ownerName: 'Mohd. Asif', totalVoters: 6, ward: 'Ward 48', lat: '26.8475', lng: '80.9480', notes: 'Employment is key issue' },
+          { houseNumber: 'H-202', ownerName: 'Gurpreet Singh', totalVoters: 2, ward: 'Ward 48', lat: '26.8500', lng: '80.9520', notes: 'Wants whatsapp updates' },
+          { houseNumber: 'H-203', ownerName: 'Anjali Dwivedi', totalVoters: 4, ward: 'Ward 48', lat: '26.8525', lng: '80.9560', notes: 'Opponent leaning' }
+        ]
+
+        await Promise.all(mockHousesData.map(h => 
+          api('/api/election/houses', {
+            method: 'POST',
+            token,
+            body: h
+          })
+        ))
+      }
       
       const r1 = await api('/api/election-campaign/routes', {
         method: 'POST',
@@ -438,7 +493,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
     const mockLoc = matchingRoute?.points?.[0] || { lat: 26.8467, lng: 80.9462 }
     
     try {
-      await api('/api/election-campaign/surveys', {
+      await api(`/api/election-campaign/surveys?mode=${dashboardMode}`, {
         method: 'POST',
         token,
         body: {
@@ -756,7 +811,8 @@ export default function MapTab({ token, mode: dashboardMode }) {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF7A00]" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 h-[72vh] min-h-[500px]">
+        <>
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 h-[72vh] min-h-[500px]">
           {/* Main Map View with dynamic vector layers */}
           <div className={mapFrameClass}>
             <MapContainer center={[26.8467, 80.9462]} zoom={13} style={{ height: '100%', width: '100%', zIndex: 10 }}>
@@ -778,6 +834,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
                 followMode={followMode} 
                 routes={routes} 
                 fitBoundsTrigger={fitBoundsTrigger} 
+                mapTarget={mapTarget}
               />
 
               {/* Draw Route Polylines (styled based on dark mode) */}
@@ -914,6 +971,41 @@ export default function MapTab({ token, mode: dashboardMode }) {
                   </Marker>
                 )
               })}
+
+              {/* Plotted Houses/Households on Map */}
+              {houses.map(h => {
+                if (h.lat === undefined || h.lng === undefined || isNaN(Number(h.lat)) || isNaN(Number(h.lng))) return null
+                
+                // Check if this house is assigned to the selected volunteer's route
+                let isAssignedToSelectedRoute = false
+                if (selectedVol && selectedVol.assignedRouteId) {
+                  const activeRoute = routes.find(r => r.id === selectedVol.assignedRouteId)
+                  if (activeRoute && Array.isArray(activeRoute.houseIds) && activeRoute.houseIds.includes(h.id)) {
+                    isAssignedToSelectedRoute = true
+                  }
+                }
+
+                return (
+                  <Marker
+                    key={h.id}
+                    position={[Number(h.lat), Number(h.lng)]}
+                    icon={createHouseMarker(isDarkMode, isAssignedToSelectedRoute)}
+                  >
+                    <Popup className={isDarkMode ? 'dark-popup' : ''}>
+                      <div className={`p-2 space-y-1 text-xs min-w-[160px] ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                        <p className="font-extrabold border-b pb-1 border-slate-700 flex items-center justify-between">
+                          <span>🏠 House: {h.houseNumber || 'N/A'}</span>
+                          <span className="text-[9px] bg-slate-500/20 text-slate-400 px-1.5 py-0.5 rounded font-black">HOUSE</span>
+                        </p>
+                        <p><strong>Owner/Head:</strong> {h.ownerName || '—'}</p>
+                        <p><strong>Total Voters:</strong> {h.totalVoters || 0}</p>
+                        {h.ward && <p><strong>Ward:</strong> {h.ward}</p>}
+                        {h.notes && <p className="italic text-slate-400 mt-1">"{h.notes}"</p>}
+                      </div>
+                    </Popup>
+                  </Marker>
+                )
+              })}
             </MapContainer>
 
             {/* Dynamic Map Legend Overlay */}
@@ -925,6 +1017,14 @@ export default function MapTab({ token, mode: dashboardMode }) {
                 <div className="flex items-center gap-2">
                   <span className="w-3.5 h-1 bg-[#FF5500] rounded" />
                   <span>Planned Route</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded bg-slate-500/30 border border-slate-400 flex items-center justify-center text-[8px]">🏠</span>
+                  <span>Household Point</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-1 border-t border-dashed" style={{ borderTopWidth: '2px', borderTopColor: isDarkMode ? "#00d2ff" : "#0284c7" }} />
+                  <span>Walked Path</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-[#10b981] border border-white inline-block" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
@@ -1297,7 +1397,290 @@ export default function MapTab({ token, mode: dashboardMode }) {
             )}
           </div>
         </div>
-      )}
+
+        {/* Operations Details Tables Section */}
+        <div className="mt-8 space-y-6">
+          <h3 className={`text-sm font-extrabold flex items-center gap-2 border-b pb-2 ${isDarkMode ? 'text-slate-200 border-slate-800' : 'text-slate-800 border-slate-200'}`}>
+            📊 Live Campaign Operations Directory
+          </h3>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Table 1: Volunteers Activity */}
+            <div className={`p-5 rounded-2xl border flex flex-col h-[350px] ${isDarkMode ? 'bg-slate-905 border-slate-850' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <h4 className={`text-xs font-black uppercase tracking-wider mb-3 flex items-center justify-between ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                <span>👥 Volunteers Activity</span>
+                <span className="text-[10px] bg-orange-500/10 text-[#FF7A00] px-2 py-0.5 rounded font-black">{volunteers.length} Active</span>
+              </h4>
+              <div className="flex-1 overflow-y-auto dark-scrollbar pr-1 space-y-2.5">
+                {volunteers.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic text-center py-10">No active volunteers found.</p>
+                ) : (
+                  volunteers.map(v => {
+                    const assignedRoute = routes.find(r => r.id === v.assignedRouteId)
+                    return (
+                      <div key={v.id} className={`p-3 rounded-xl border flex flex-col justify-between text-xs gap-1.5 ${isDarkMode ? 'bg-slate-950/40 border-slate-850 hover:bg-slate-950/80' : 'bg-slate-50 border-slate-200/80 hover:bg-slate-100/50'}`}>
+                        <div className="flex justify-between items-center">
+                          <strong className={isDarkMode ? 'text-slate-200' : 'text-slate-800'}>{v.name}</strong>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-black ${v.status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-500/15 text-slate-400'}`}>
+                            {v.status || 'inactive'}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium">
+                          <p>📍 Route: {assignedRoute ? assignedRoute.name : 'Not assigned'}</p>
+                          <p className="flex items-center gap-2 mt-1">
+                            <span>🔋 Battery: {v.lastKnownLocation?.battery || 100}%</span>
+                            <span>📶 Signal: {v.lastKnownLocation?.signal || 'excellent'}</span>
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Table 2: Planned Routes */}
+            <div className={`p-5 rounded-2xl border flex flex-col h-[350px] ${isDarkMode ? 'bg-slate-905 border-slate-850' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <h4 className={`text-xs font-black uppercase tracking-wider mb-3 flex items-center justify-between ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                <span>📍 Planned Routes</span>
+                <span className="text-[10px] bg-orange-500/10 text-[#FF7A00] px-2 py-0.5 rounded font-black">{routes.length} Total</span>
+              </h4>
+              <div className="flex-1 overflow-y-auto dark-scrollbar pr-1 space-y-2.5">
+                {routes.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic text-center py-10">No routes registered.</p>
+                ) : (
+                  routes.map(r => {
+                    const assignedVol = volunteers.find(v => v.id === r.assignedVolunteerId)
+                    return (
+                      <div key={r.id} className={`p-3 rounded-xl border flex flex-col justify-between text-xs gap-1.5 ${isDarkMode ? 'bg-slate-950/40 border-slate-850 hover:bg-slate-950/80' : 'bg-slate-50 border-slate-200/80 hover:bg-slate-100/50'}`}>
+                        <div className="flex justify-between items-start">
+                          <strong className={isDarkMode ? 'text-slate-200' : 'text-slate-800'}>{r.name}</strong>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-black ${isDarkMode ? 'bg-slate-800 text-slate-350' : 'bg-slate-200/60 text-slate-600'}`}>{r.ward}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium">
+                          <p>👤 Assigned: <strong>{assignedVol ? assignedVol.name : 'None'}</strong></p>
+                          <p>🗺️ Total Stops: {r.points?.length || 0}</p>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Table 3: D2D Surveys Feed */}
+            <div className={`p-5 rounded-2xl border flex flex-col h-[350px] ${isDarkMode ? 'bg-slate-905 border-slate-850' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <h4 className={`text-xs font-black uppercase tracking-wider mb-3 flex items-center justify-between ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                <span>📋 D2D Surveys Feed</span>
+                <span className="text-[10px] bg-orange-500/10 text-[#FF7A00] px-2 py-0.5 rounded font-black">{surveys.length} Captured</span>
+              </h4>
+              <div className="flex-1 overflow-y-auto dark-scrollbar pr-1 space-y-2.5">
+                {surveys.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic text-center py-10">No survey responses received.</p>
+                ) : (
+                  surveys.map(s => {
+                    const statusColor = getStatusColor(s.politicalFeedback?.supportStatus)
+                    return (
+                      <div key={s.id} className={`p-3 rounded-xl border flex flex-col justify-between text-xs gap-1.5 relative overflow-hidden ${isDarkMode ? 'bg-slate-950/40 border-slate-850 hover:bg-slate-950/80' : 'bg-slate-50 border-slate-200/80 hover:bg-slate-100/50'}`}>
+                        <div className="absolute top-0 left-0 bottom-0 w-1" style={{ backgroundColor: statusColor }}></div>
+                        <div className="flex justify-between items-start pl-1.5">
+                          <div>
+                            <strong className={isDarkMode ? 'text-slate-200' : 'text-slate-800'}>{s.houseNumber || 'H-N/A'}</strong>
+                            <span className="text-[10px] text-slate-400 ml-1.5 font-semibold">— {s.familyDetails?.headName}</span>
+                          </div>
+                          <span className="text-[9px] font-black uppercase tracking-wider" style={{ color: statusColor }}>
+                            {s.politicalFeedback?.supportStatus || 'Neutral'}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 pl-1.5 font-medium space-y-0.5">
+                          <p>🔧 Key Issue: <strong>{s.politicalFeedback?.keyIssue || 'Other'}</strong></p>
+                          {s.remarks && <p className="italic text-slate-500 line-clamp-1">"{s.remarks}"</p>}
+                          <div className="flex justify-between items-center pt-1 border-t border-dashed border-slate-800/40 mt-1">
+                            <span>👤 Vol: {s.autoCaptured?.volunteerName || 'Manual'}</span>
+                            <span>👥 Voters: {s.familyDetails?.totalVoters || 0}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Full-width D2D Surveys Operations Grid Table */}
+          <div className={`p-6 rounded-3xl border flex flex-col ${isDarkMode ? 'bg-slate-900/60 border-slate-850' : 'bg-white border-slate-200 shadow-md'}`}>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-5 pb-4 border-b border-slate-800/20">
+              <div>
+                <h4 className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+                  <Navigation size={15} className="text-[#FF7A00]" />
+                  <span>Door-To-Door (D2D) Visit Logs Database</span>
+                </h4>
+                <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-450' : 'text-slate-500'}`}>
+                  Operations database of recent door-to-door surveys, citizen feedback, and volunteer tasks.
+                </p>
+              </div>
+
+              {/* Table search and filtering controls */}
+              <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+                <input
+                  type="text"
+                  placeholder="Search by volunteer, house, name..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={`px-3 py-1.5 text-xs rounded-xl border focus:outline-none focus:border-[#FF7A00] w-full md:w-56 ${
+                    isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
+                  }`}
+                />
+                <select
+                  value={filterSupport}
+                  onChange={(e) => setFilterSupport(e.target.value)}
+                  className={`px-3 py-1.5 text-xs rounded-xl border focus:outline-none focus:border-[#FF7A00] ${
+                    isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
+                  }`}
+                >
+                  <option value="all">All Sentiment</option>
+                  <option value="Supporter">Supporter</option>
+                  <option value="Neutral">Neutral</option>
+                  <option value="Undecided">Undecided</option>
+                  <option value="Opponent">Opponent</option>
+                </select>
+                <select
+                  value={filterIssue}
+                  onChange={(e) => setFilterIssue(e.target.value)}
+                  className={`px-3 py-1.5 text-xs rounded-xl border focus:outline-none focus:border-[#FF7A00] ${
+                    isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-800'
+                  }`}
+                >
+                  <option value="all">All Issues</option>
+                  <option value="Road">Road</option>
+                  <option value="Water">Water</option>
+                  <option value="Electricity">Electricity</option>
+                  <option value="Employment">Employment</option>
+                  <option value="Health">Health</option>
+                  <option value="Education">Education</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Surveys database table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className={`border-b text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'bg-slate-950/60 border-slate-800 text-slate-450' : 'bg-slate-50 border-slate-200 text-slate-550'}`}>
+                    <th className="px-4 py-3">Visit Time</th>
+                    <th className="px-4 py-3">Volunteer</th>
+                    <th className="px-4 py-3">Route Name</th>
+                    <th className="px-4 py-3">House / Head</th>
+                    <th className="px-4 py-3 text-center">Voters</th>
+                    <th className="px-4 py-3">Sentiment</th>
+                    <th className="px-4 py-3">Key Issue</th>
+                    <th className="px-4 py-3">Follow Up</th>
+                    <th className="px-4 py-3">Remarks</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className={`divide-y ${isDarkMode ? 'divide-slate-850' : 'divide-slate-100'}`}>
+                  {(() => {
+                    const tableFilteredSurveys = surveys.filter(s => {
+                      const volName = s.autoCaptured?.volunteerName || 'Manual Entry'
+                      const hNum = s.houseNumber || ''
+                      const head = s.familyDetails?.headName || ''
+                      const rem = s.remarks || ''
+                      
+                      const matchesSearch = searchQuery === '' || 
+                        volName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        hNum.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        head.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        rem.toLowerCase().includes(searchQuery.toLowerCase())
+                        
+                      const matchesSupport = filterSupport === 'all' || s.politicalFeedback?.supportStatus === filterSupport
+                      const matchesIssue = filterIssue === 'all' || s.politicalFeedback?.keyIssue === filterIssue
+                      
+                      return matchesSearch && matchesSupport && matchesIssue
+                    })
+
+                    if (tableFilteredSurveys.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={10} className="px-4 py-8 text-center text-slate-500 italic">
+                            No visits recorded matching the current filters.
+                          </td>
+                        </tr>
+                      )
+                    }
+
+                    return tableFilteredSurveys.map(s => {
+                      const statusColor = getStatusColor(s.politicalFeedback?.supportStatus)
+                      const routeName = routes.find(r => r.id === s.routeId)?.name || s.autoCaptured?.routeId || 'Manual Plot'
+                      return (
+                        <tr key={s.id} className={`hover:bg-slate-50/5 ${isDarkMode ? 'hover:bg-slate-850/30' : 'hover:bg-slate-55/40'}`}>
+                          <td className="px-4 py-3.5 whitespace-nowrap text-slate-450 font-semibold">
+                            {new Date(s.proof?.visitTime || s.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap font-bold text-[#FF7A00]">
+                            {s.autoCaptured?.volunteerName || 'Manual Entry'}
+                          </td>
+                          <td className="px-4 py-3.5 max-w-[150px] truncate font-medium text-slate-650 dark:text-slate-350">
+                            {routeName}
+                          </td>
+                          <td className="px-4 py-3.5 font-medium">
+                            <span className="font-bold text-slate-800 dark:text-slate-100">{s.houseNumber || 'H-N/A'}</span>
+                            <span className={`block text-[10px] ${isDarkMode ? 'text-slate-450' : 'text-slate-550'}`}>{s.familyDetails?.headName}</span>
+                          </td>
+                          <td className="px-4 py-3.5 text-center font-bold">
+                            {s.familyDetails?.totalVoters || 0}
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[10px] border" style={{ backgroundColor: statusColor + '15', color: statusColor, borderColor: statusColor + '30' }}>
+                              {s.politicalFeedback?.supportStatus || 'Neutral'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 font-bold">
+                            {s.politicalFeedback?.keyIssue || 'Other'}
+                          </td>
+                          <td className="px-4 py-3.5 font-medium space-y-0.5">
+                            {s.followUp?.candidateVisitRequired && (
+                              <span className="inline-block text-[9px] bg-purple-500/10 text-purple-400 border border-purple-900/30 px-1.5 py-0.5 rounded mr-1 font-bold">Visit Needed</span>
+                            )}
+                            {s.followUp?.wantsWhatsappUpdates && (
+                              <span className="inline-block text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-900/30 px-1.5 py-0.5 rounded font-bold">WhatsApp</span>
+                            )}
+                            {!s.followUp?.candidateVisitRequired && !s.followUp?.wantsWhatsappUpdates && (
+                              <span className="text-slate-500">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5 max-w-[200px] truncate italic text-slate-450">
+                            {s.remarks || '—'}
+                          </td>
+                          <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (s.gpsLocation && s.gpsLocation.lat) {
+                                  setMapTarget({ lat: s.gpsLocation.lat, lng: s.gpsLocation.lng, zoom: 16, trigger: Date.now() })
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-orange-500/10 text-[#FF7A00] border border-[#FF7A00]/20 rounded-lg hover:bg-orange-500/20 font-bold transition-all cursor-pointer"
+                            >
+                              📍 Locate
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </>
+    )}
 
       {/* Manual Survey Log Dialog */}
       {surveyModal && (

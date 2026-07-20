@@ -3,21 +3,27 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, HelpCircle, Settings as SettingsIcon,
   Menu, ChevronDown, ChevronRight, LogOut, AlertCircle, HelpCircle as HelpIcon,
-  UserCheck, Navigation, Map, Shield, Activity
+  UserCheck, Navigation, Map, Shield, Activity, Footprints
 } from 'lucide-react'
 import { api, TOKEN_ELECTION, TOKEN_CLIENT } from '../../lib/api'
 import CandidatesTab from './components/CandidatesTab'
 import VolunteersTab from './components/VolunteersTab'
 import RoutesTab from './components/RoutesTab'
 import MapTab from './components/MapTab'
+import VotersTab from './components/VotersTab'
+import SabhaTab from './components/SabhaTab'
+import PadyatraTab from './components/PadyatraTab'
 
 const TABS = [
-  { id: 'overview',   label: 'Overview',           icon: LayoutDashboard },
-  { id: 'candidates', label: 'Candidates',         icon: Users },
-  { id: 'volunteers', label: 'Volunteers',         icon: UserCheck },
-  { id: 'routes',     label: 'Routes',             icon: Navigation },
-  { id: 'map',        label: 'Ailocity Map',       icon: Map },
-  { id: 'simulator',  label: 'Telemetry Simulator', icon: Activity },
+  { id: 'overview',   label: 'Overview',            icon: LayoutDashboard },
+  { id: 'map',        label: 'Live Map',            icon: Map },
+  { id: 'routes',     label: 'Routes',              icon: Navigation },
+  { id: 'volunteers', label: 'Volunteers',          icon: UserCheck },
+  { id: 'candidates', label: 'Candidates',          icon: Users },
+  { id: 'voters',     label: 'Voters',              icon: Users },
+  { id: 'sabha',      label: 'Sabha (Public)',      icon: Shield },
+  { id: 'padyatra',   label: 'Padyatra',            icon: Footprints },
+  { id: 'simulator',  label: 'Telemetry Simulator',  icon: Activity },
 ]
 
 const BOTTOM_TABS = [
@@ -292,6 +298,21 @@ export default function ElectionDashboard() {
               {/* Map Tab Content */}
               {active === 'map' && (
                 <MapTab token={token} mode="real" />
+              )}
+
+              {/* Voters Tab Content */}
+              {active === 'voters' && (
+                <VotersTab />
+              )}
+
+              {/* Sabha Tab Content */}
+              {active === 'sabha' && (
+                <SabhaTab />
+              )}
+
+              {/* Padyatra Tab Content */}
+              {active === 'padyatra' && (
+                <PadyatraTab />
               )}
 
               {/* Telemetry Simulator Hub Tab Content */}

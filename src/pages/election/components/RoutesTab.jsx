@@ -61,6 +61,23 @@ const createStopIcon = () => {
   })
 }
 
+const createHouseMarker = (isSelected) => {
+  const fillBg = isSelected ? '#FF7A00' : '#64748b'
+  const borderCol = isSelected ? '#ffffff' : '#e2e8f0'
+  const icon = isSelected ? '✅' : '🏠'
+  const scaleStyle = isSelected ? 'transform: scale(1.15); box-shadow: 0 3px 8px rgba(255, 122, 0, 0.4);' : 'box-shadow: 0 1.5px 3.5px rgba(0,0,0,0.25);'
+  return L.divIcon({
+    html: `
+      <div style="position: relative; width: 22px; height: 22px; border-radius: 6px; background-color: ${fillBg}; border: 2.2px solid ${borderCol}; display: flex; align-items: center; justify-content: center; ${scaleStyle}">
+        <span style="font-size: 10px;">${icon}</span>
+      </div>
+    `,
+    className: 'house-helper-marker',
+    iconSize: [22, 22],
+    iconAnchor: [11, 11]
+  })
+}
+
 // Sub-component to capture clicks on Leaflet map inside Add/Edit modal
 function MapClickHandler({ onMapClick, readOnly }) {
   useMapEvents({
@@ -117,6 +134,7 @@ function ActionsDropdown({ onView, onEdit, onAssign, onDelete }) {
 export default function RoutesTab({ token, mode: dashboardMode }) {
   const [routes, setRoutes] = useState([])
   const [volunteers, setVolunteers] = useState([])
+  const [houses, setHouses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -132,12 +150,14 @@ export default function RoutesTab({ token, mode: dashboardMode }) {
     try {
       setLoading(true)
       setError('')
-      const [rteRes, volRes] = await Promise.all([
+      const [rteRes, volRes, hseRes] = await Promise.all([
         api(`/api/election-campaign/routes?mode=${dashboardMode}`, { token }),
-        api(`/api/election-campaign/volunteers?mode=${dashboardMode}`, { token })
+        api(`/api/election-campaign/volunteers?mode=${dashboardMode}`, { token }),
+        api(`/api/election/houses`, { token })
       ])
       setRoutes(rteRes.routes || [])
       setVolunteers(volRes.volunteers || [])
+      setHouses(hseRes.houses || [])
     } catch (err) {
       setError(err.message || 'Failed to load campaign data')
     } finally {
@@ -159,14 +179,15 @@ export default function RoutesTab({ token, mode: dashboardMode }) {
         description: '',
         status: 'active',
         assignedVolunteerId: '',
-        points: []
+        points: [],
+        houseIds: []
       },
       item: null
     })
   }
 
   const openEdit = (item) => {
-    setModal({ mode: 'edit', form: { ...item }, item })
+    setModal({ mode: 'edit', form: { houseIds: [], ...item }, item })
   }
 
   const openAssign = (item) => {
@@ -275,10 +296,37 @@ export default function RoutesTab({ token, mode: dashboardMode }) {
     }))
   }
 
+  const handleHouseClick = (house) => {
+    if (modal.mode === 'view' || modal.mode === 'assign') return
+    const housePt = { lat: Number(house.lat), lng: Number(house.lng) }
+    const currentHouseIds = modal.form.houseIds || []
+    const isAlreadySelected = currentHouseIds.includes(house.id)
+    
+    let nextHouseIds
+    let nextPoints = modal.form.points || []
+    
+    if (isAlreadySelected) {
+      nextHouseIds = currentHouseIds.filter(id => id !== house.id)
+      nextPoints = nextPoints.filter(p => !(Math.abs(p.lat - housePt.lat) < 0.0001 && Math.abs(p.lng - housePt.lng) < 0.0001))
+    } else {
+      nextHouseIds = [...currentHouseIds, house.id]
+      nextPoints = [...nextPoints, housePt]
+    }
+    
+    setModal(prev => ({
+      ...prev,
+      form: {
+        ...prev.form,
+        houseIds: nextHouseIds,
+        points: nextPoints
+      }
+    }))
+  }
+
   const clearPoints = () => {
     setModal(prev => ({
       ...prev,
-      form: { ...prev.form, points: [] }
+      form: { ...prev.form, points: [], houseIds: [] }
     }))
   }
 
@@ -510,29 +558,67 @@ export default function RoutesTab({ token, mode: dashboardMode }) {
                       </select>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-100 space-y-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-slate-500">PLOTTED PATH</span>
-                        <span className="font-bold text-[#FF7A00]">{modal.form.points?.length || 0} coordinates</span>
-                      </div>
-                      {modal.mode !== 'view' && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={clearPoints}
-                            className="flex items-center justify-center gap-1 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                          >
-                            <RotateCcw size={12} /> Clear Path
-                          </button>
-                          <button
-                            type="button"
-                            onClick={generateLucknowPath}
-                            className="py-1.5 bg-orange-50 rounded-lg text-xs font-semibold text-[#FF7A00] hover:bg-orange-100"
-                          >
-                            Mock Path
-                          </button>
+                    <div className="pt-2 border-t border-slate-100 space-y-3">
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-bold text-slate-500 uppercase tracking-wider">Plotted Path</span>
+                          <span className="font-bold text-[#FF7A00]">{modal.form.points?.length || 0} coordinates</span>
                         </div>
-                      )}
+                        {modal.mode !== 'view' && (
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={clearPoints}
+                              className="flex items-center justify-center gap-1 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                            >
+                              <RotateCcw size={12} /> Clear Path
+                            </button>
+                            <button
+                              type="button"
+                              onClick={generateLucknowPath}
+                              className="py-1.5 bg-orange-50 rounded-lg text-xs font-semibold text-[#FF7A00] hover:bg-orange-100"
+                            >
+                              Mock Path
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="border-t border-slate-100 pt-2 space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-bold text-slate-500 uppercase tracking-wider">Selected Houses</span>
+                          <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded text-[10px]">
+                            {modal.form.houseIds?.length || 0} Houses
+                          </span>
+                        </div>
+                        <div className="max-h-36 overflow-y-auto space-y-1 pr-1 text-[11px] max-w-full">
+                          {(!modal.form.houseIds || modal.form.houseIds.length === 0) ? (
+                            <p className="text-slate-400 italic text-[10px] leading-relaxed">Map par 🏠 click karke route me houses assign karein.</p>
+                          ) : (
+                            modal.form.houseIds.map(hId => {
+                              const hObj = houses.find(house => house.id === hId)
+                              if (!hObj) return null
+                              return (
+                                <div key={hId} className="flex justify-between items-center bg-slate-50 p-1.5 rounded border border-slate-100 gap-2">
+                                  <span className="font-bold text-slate-700 truncate flex-1">
+                                    🏠 {hObj.houseNumber} {hObj.ownerName ? `(${hObj.ownerName})` : ''}
+                                  </span>
+                                  {modal.mode !== 'view' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleHouseClick(hObj)}
+                                      className="text-red-500 hover:text-red-750 font-black px-1 text-xs cursor-pointer hover:bg-red-50 rounded"
+                                      title="Remove from Route"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </>
                 )}
@@ -564,14 +650,32 @@ export default function RoutesTab({ token, mode: dashboardMode }) {
                     📌 Map click karke route stops add karein (Line automatically ban jayegi).
                   </div>
                 )}
-                
-                <MapContainer center={[26.8467, 80.9462]} zoom={13} style={{ height: '100%', width: '100%', zIndex: 10 }}>
+                        <MapContainer center={[26.8467, 80.9462]} zoom={13} style={{ height: '100%', width: '100%', zIndex: 10 }}>
                   <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   />
                   <MapClickHandler onMapClick={handleMapClick} readOnly={modal.mode === 'view' || modal.mode === 'assign'} />
                   
+                  {/* Household Guides on Map */}
+                  {houses.map(h => {
+                    if (h.lat === undefined || h.lng === undefined || isNaN(Number(h.lat)) || isNaN(Number(h.lng))) return null
+                    const isSelected = modal.form.houseIds?.includes(h.id)
+                    return (
+                      <Marker
+                        key={h.id}
+                        position={[Number(h.lat), Number(h.lng)]}
+                        icon={createHouseMarker(isSelected)}
+                        eventHandlers={{
+                          click: () => {
+                            if (modal.mode === 'view' || modal.mode === 'assign') return
+                            handleHouseClick(h)
+                          }
+                        }}
+                      />
+                    )
+                  })}
+
                   {/* Route Polyline Path */}
                   {modal.form.points && modal.form.points.length > 0 && (
                     <>
