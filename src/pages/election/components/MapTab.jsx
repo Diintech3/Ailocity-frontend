@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Map, Users, Navigation, Shield, Compass, Plus, Play, Pause, Activity, Filter, MapPin, User, Check, ListFilter, HelpCircle, Phone, X, CheckCircle2, RefreshCw, Wifi, Eye, EyeOff, Search, Info } from 'lucide-react'
+import { Map, Users, Navigation, Shield, Compass, Plus, Play, Pause, Activity, Filter, MapPin, User, Check, ListFilter, HelpCircle, Phone, X, CheckCircle2, RefreshCw, Wifi, Eye, EyeOff, Search, Info, AlertCircle } from 'lucide-react'
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-leaflet'
-import L from 'leaflet'
+import L from '../../../lib/leafletFix'
 import { api } from '../../../lib/api'
 import 'leaflet/dist/leaflet.css'
 
@@ -33,15 +33,66 @@ const createPulsingMarker = (name, isDarkMode, color = '#FF7A00') => {
   })
 }
 
-// Colored Marker for Route Stops (Responsive to Dark/Light mode)
+// Start Point: Glowing emerald green icon with "START" label and pulse animation
+const createStartIcon = (isDarkMode) => {
+  const centerBg = isDarkMode ? '#064e3b' : '#10b981'
+  const glowColor = '#10b981'
+  return L.divIcon({
+    html: `
+      <div style="position: relative; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+        <div style="position: absolute; width: 32px; height: 32px; border-radius: 50%; background-color: ${glowColor}; opacity: 0.3; transform: scale(1.4); animation: pulseGreen 1.8s infinite ease-in-out;"></div>
+        <div style="position: absolute; width: 26px; height: 26px; border-radius: 50%; background-color: ${centerBg}; border: 2.5px solid #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(0,0,0,0.3);">
+          <span style="font-size: 8px; font-weight: 900; color: #ffffff; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1;">START</span>
+        </div>
+      </div>
+      <style>
+        @keyframes pulseGreen {
+          0% { transform: scale(1); opacity: 0.5; }
+          70% { transform: scale(1.5); opacity: 0; }
+          100% { transform: scale(1); opacity: 0; }
+        }
+      </style>
+    `,
+    className: 'route-start-marker',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  })
+}
+
+// End Point: Glowing crimson red icon with "END" label and pulse animation
+const createEndIcon = (isDarkMode) => {
+  const centerBg = isDarkMode ? '#7f1d1d' : '#ef4444'
+  const glowColor = '#ef4444'
+  return L.divIcon({
+    html: `
+      <div style="position: relative; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+        <div style="position: absolute; width: 32px; height: 32px; border-radius: 50%; background-color: ${glowColor}; opacity: 0.3; transform: scale(1.4); animation: pulseRed 1.8s infinite ease-in-out;"></div>
+        <div style="position: absolute; width: 26px; height: 26px; border-radius: 50%; background-color: ${centerBg}; border: 2.5px solid #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(0,0,0,0.3);">
+          <span style="font-size: 8px; font-weight: 900; color: #ffffff; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1;">END</span>
+        </div>
+      </div>
+      <style>
+        @keyframes pulseRed {
+          0% { transform: scale(1); opacity: 0.5; }
+          70% { transform: scale(1.5); opacity: 0; }
+          100% { transform: scale(1); opacity: 0; }
+        }
+      </style>
+    `,
+    className: 'route-end-marker',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  })
+}
+
+// Colored Marker for Route Stops (Responsive to Dark/Light mode) - Subtle orange point to avoid cluttering the map
 const createStopIcon = (isDarkMode) => {
   const centerBg = isDarkMode ? '#1e293b' : '#ffffff'
-  const shadow = isDarkMode ? 'box-shadow: 0 0 6px #FF5500aa;' : 'box-shadow: 0 2px 4px rgba(0,0,0,0.25);'
   return L.divIcon({
-    html: `<div style="width: 12px; height: 12px; border-radius: 50%; background-color: ${centerBg}; border: 3px solid #FF5500; ${shadow}"></div>`,
+    html: `<div style="width: 8px; height: 8px; border-radius: 50%; background-color: #FF5500; border: 1.5px solid ${isDarkMode ? '#0f172a' : '#ffffff'}; box-shadow: 0 1px 3px rgba(0,0,0,0.25);"></div>`,
     className: 'route-stop-marker',
-    iconSize: [12, 12],
-    iconAnchor: [6, 6]
+    iconSize: [8, 8],
+    iconAnchor: [4, 4]
   })
 }
 
@@ -83,19 +134,28 @@ const createSurveyMarker = (status, isDarkMode) => {
 // Leaflet Map viewport and camera controller
 function MapController({ selectedVol, followMode, routes, fitBoundsTrigger }) {
   const map = useMap()
+  const lastCenterRef = useRef(null)
 
   // Follow selected volunteer
   useEffect(() => {
-    if (!map || !selectedVol || !followMode) return
+    if (!map || !map._mapPane || !selectedVol || !followMode) return
     const loc = selectedVol.lastKnownLocation
     if (loc && loc.lat && loc.lng) {
-      map.setView([loc.lat, loc.lng], map.getZoom())
+      const latLngKey = `${loc.lat.toFixed(5)},${loc.lng.toFixed(5)}`
+      if (lastCenterRef.current !== latLngKey) {
+        lastCenterRef.current = latLngKey
+        try {
+          map.setView([loc.lat, loc.lng], map.getZoom(), { animate: false })
+        } catch (e) {
+          console.warn('Map setView error ignored:', e)
+        }
+      }
     }
   }, [map, selectedVol, followMode])
 
   // Center/fit map to routes and volunteers bounds
   useEffect(() => {
-    if (!map || fitBoundsTrigger === 0) return
+    if (!map || !map._mapPane || fitBoundsTrigger === 0) return
     const coords = []
     routes.forEach(r => {
       if (r.points && r.points.length > 0) {
@@ -103,7 +163,11 @@ function MapController({ selectedVol, followMode, routes, fitBoundsTrigger }) {
       }
     })
     if (coords.length > 0) {
-      map.fitBounds(coords, { padding: [40, 40] })
+      try {
+        map.fitBounds(coords, { padding: [40, 40] })
+      } catch (e) {
+        console.warn('fitBounds error ignored:', e)
+      }
     }
   }, [map, fitBoundsTrigger, routes])
 
@@ -115,7 +179,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
   const [routes, setRoutes] = useState([])
   const [surveys, setSurveys] = useState([])
   const [loading, setLoading] = useState(true)
-  const [simulating, setSimulating] = useState(true)
+  const [simulating, setSimulating] = useState(dashboardMode === 'simulator')
   const [selectedVol, setSelectedVol] = useState(null)
   
   // Real-time telemetry config & Theme mode
@@ -133,7 +197,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
   const [filterIssue, setFilterIssue] = useState('all')
 
   // Simulator settings
-  const [simSpeed, setSimSpeed] = useState(4500) // Telemetry speed in ms
+  const [simSpeed, setSimSpeed] = useState(2000) // Telemetry speed in ms
   const [surveyRate, setSurveyRate] = useState(0.4) // Probability of auto-generating survey per step
   const [showSimControls, setShowSimControls] = useState(true)
 
@@ -188,13 +252,17 @@ export default function MapTab({ token, mode: dashboardMode }) {
     }
   }, [volunteers, selectedVol])
 
-  // Simulation walking engine: moves volunteers in simulator mode
+  // Simulation walking engine: moves volunteers in simulator/live activity mode
   useEffect(() => {
-    if (dashboardMode !== 'simulator' || !simulating) return
+    if (!simulating) return
     const interval = setInterval(async () => {
       try {
-        // 1. Move volunteers
-        await api('/api/election-campaign/volunteers/mock-locations', { method: 'POST', token })
+        // 1. Move active volunteers (passing simulateAll: true to simulate real volunteers too if they are assigned)
+        await api('/api/election-campaign/volunteers/mock-locations', {
+          method: 'POST',
+          token,
+          body: { simulateAll: true }
+        })
         
         // 2. Generate random surveys
         const activeVols = volunteers.filter(v => v.status === 'active' && v.assignedRouteId)
@@ -234,7 +302,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
     }, simSpeed)
     
     return () => clearInterval(interval)
-  }, [simulating, volunteers, routes, token, loadData, dashboardMode, simSpeed, surveyRate])
+  }, [simulating, volunteers, routes, token, loadData, simSpeed, surveyRate])
 
   // Live telemetry polling for normal mode
   useEffect(() => {
@@ -251,6 +319,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
   const handleSetupMockData = async () => {
     try {
       setLoading(true)
+      const isSim = dashboardMode === 'simulator'
       
       const r1 = await api('/api/election-campaign/routes', {
         method: 'POST',
@@ -266,7 +335,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
             { lat: 26.8530, lng: 80.9200 },
             { lat: 26.8580, lng: 80.9250 }
           ],
-          isSimulated: true
+          isSimulated: isSim
         }
       })
       
@@ -284,7 +353,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
             { lat: 26.8510, lng: 80.9540 },
             { lat: 26.8540, lng: 80.9580 }
           ],
-          isSimulated: true
+          isSimulated: isSim
         }
       })
       
@@ -299,7 +368,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
           vidhanSabha: 'Lucknow Central',
           boothNumber: 'Booth 12',
           lastKnownLocation: { lat: 26.8520, lng: 80.9120, index: 0, direction: 1, battery: 98, signal: 'excellent', updatedAt: new Date().toISOString() },
-          isSimulated: true
+          isSimulated: isSim
         }
       })
 
@@ -314,7 +383,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
           vidhanSabha: 'Lucknow Central',
           boothNumber: 'Booth 18',
           lastKnownLocation: { lat: 26.8467, lng: 80.9462, index: 0, direction: 1, battery: 89, signal: 'good', updatedAt: new Date().toISOString() },
-          isSimulated: true
+          isSimulated: isSim
         }
       })
       
@@ -519,6 +588,11 @@ export default function MapTab({ token, mode: dashboardMode }) {
           color: #f1f5f9 !important;
         }
         
+        /* Smooth volunteer marker movement */
+        .pulsing-volunteer-marker {
+          transition: transform ${(simSpeed / 1000) + 0.2}s linear, top ${(simSpeed / 1000) + 0.2}s linear, left ${(simSpeed / 1000) + 0.2}s linear !important;
+        }
+
         /* Scrollbar override for clean dark lists */
         .dark-scrollbar::-webkit-scrollbar {
           width: 5px;
@@ -550,7 +624,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
 
       {/* Control bar */}
       <div className={controlBarClass}>
-        <div>
+        <div className="max-w-xl">
           <h3 className="text-base font-bold flex items-center gap-2">
             <Activity size={18} className={`text-[#FF7A00] ${(dashboardMode === 'simulator' && simulating) || liveTracking ? 'animate-pulse' : 'opacity-70'}`} />
             {dashboardMode === 'simulator' ? 'Live Telemetry Map & Survey Simulator' : 'Live Tracking Map & Survey Stream'}
@@ -562,94 +636,98 @@ export default function MapTab({ token, mode: dashboardMode }) {
           </p>
         </div>
 
-        {/* Telemetry and Controls integration */}
-        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          {/* Operations Theme Selector (Toggle theme mode) */}
-          <div className={controlThemePanelClass}>
-            <button
-              type="button"
-              onClick={() => setIsDarkMode(false)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                !isDarkMode 
-                  ? 'bg-white text-slate-800 shadow-sm border border-slate-200/50' 
-                  : 'text-slate-500 hover:text-slate-300'
-              }`}
-            >
-              ☀️ Light Map
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsDarkMode(true)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                isDarkMode 
-                  ? 'bg-slate-800 text-white shadow-inner border border-slate-700/30' 
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              🌙 Dark Map
-            </button>
+        {/* Telemetry and Controls integration - Structured Layout */}
+        <div className="flex flex-col items-stretch sm:items-end gap-3 w-full lg:w-auto">
+          {/* Row 1: System Theme & Live Settings */}
+          <div className="flex flex-wrap items-center justify-start sm:justify-end gap-3">
+            {/* Operations Theme Selector (Toggle theme mode) */}
+            <div className={controlThemePanelClass}>
+              <button
+                type="button"
+                onClick={() => setIsDarkMode(false)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  !isDarkMode 
+                    ? 'bg-white text-slate-800 shadow-sm border border-slate-200/50' 
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                ☀️ Light Map
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsDarkMode(true)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  isDarkMode 
+                    ? 'bg-slate-800 text-white shadow-inner border border-slate-700/30' 
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                🌙 Dark Map
+              </button>
+            </div>
+
+            {/* Polling / Live controls */}
+            <div className={pollClass}>
+              <span className={isDarkMode ? "text-slate-400" : "text-slate-500"}>Live Updates:</span>
+              <button
+                onClick={() => setLiveTracking(!liveTracking)}
+                className={`w-8 h-4 rounded-full p-0.5 transition-colors focus:outline-none relative flex items-center ${liveTracking ? 'bg-[#FF7A00]' : 'bg-slate-700'}`}
+                title="Toggle Live Polling"
+              >
+                <span className={`w-3 h-3 rounded-full bg-white transition-transform ${liveTracking ? 'translate-x-4' : 'translate-x-0'}`} />
+              </button>
+
+              {liveTracking && (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping mx-0.5" />
+                  <select
+                    value={pollingInterval}
+                    onChange={(e) => setPollingInterval(Number(e.target.value))}
+                    className={`bg-transparent text-[#FF7A00] font-black focus:outline-none border-none py-0 pl-1 cursor-pointer ${selectBgClass}`}
+                  >
+                    <option value={2000} className={selectBgClass}>2s</option>
+                    <option value={5000} className={selectBgClass}>5s</option>
+                    <option value={10000} className={selectBgClass}>10s</option>
+                    <option value={30000} className={selectBgClass}>30s</option>
+                  </select>
+                </>
+              )}
+
+              <button
+                onClick={loadData}
+                disabled={isRefreshing}
+                className={`ml-1 text-slate-400 hover:text-[#FF7A00] transition-colors focus:outline-none ${isRefreshing ? 'animate-spin text-orange-500' : ''}`}
+                title="Force Refresh Data"
+              >
+                <RefreshCw size={12} />
+              </button>
+            </div>
           </div>
 
-          {/* Polling / Live controls */}
-          <div className={pollClass}>
-            <span className={isDarkMode ? "text-slate-400" : "text-slate-500"}>Live Updates:</span>
+          {/* Row 2: Action Triggers */}
+          <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2.5">
             <button
-              onClick={() => setLiveTracking(!liveTracking)}
-              className={`w-8 h-4 rounded-full p-0.5 transition-colors focus:outline-none relative flex items-center ${liveTracking ? 'bg-[#FF7A00]' : 'bg-slate-700'}`}
-              title="Toggle Live Polling"
+              onClick={() => setFitBoundsTrigger(t => t + 1)}
+              className={btnSecondaryClass}
+              title="Recenter camera to show all routes"
             >
-              <span className={`w-3 h-3 rounded-full bg-white transition-transform ${liveTracking ? 'translate-x-4' : 'translate-x-0'}`} />
+              <Compass size={13} className="text-[#FF7A00]" />
+              Fit Map Bounds
             </button>
 
-            {liveTracking && (
-              <>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping mx-0.5" />
-                <select
-                  value={pollingInterval}
-                  onChange={(e) => setPollingInterval(Number(e.target.value))}
-                  className={`bg-transparent text-[#FF7A00] font-black focus:outline-none border-none py-0 pl-1 cursor-pointer ${selectBgClass}`}
-                >
-                  <option value={2000} className={selectBgClass}>2s</option>
-                  <option value={5000} className={selectBgClass}>5s</option>
-                  <option value={10000} className={selectBgClass}>10s</option>
-                  <option value={30000} className={selectBgClass}>30s</option>
-                </select>
-              </>
+            {routes.length === 0 && (
+              <button
+                onClick={handleSetupMockData}
+                className={isDarkMode ? "bg-orange-500/10 text-[#FF7A00] border border-[#FF7A00]/30 px-4 py-2 rounded-xl text-xs font-bold hover:bg-orange-500/20 transition-all" : "bg-orange-50 text-[#FF7A00] border border-orange-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-orange-100 transition-all"}
+              >
+                🚀 Setup Seeds
+              </button>
             )}
 
             <button
-              onClick={loadData}
-              disabled={isRefreshing}
-              className={`ml-1 text-slate-400 hover:text-[#FF7A00] transition-colors focus:outline-none ${isRefreshing ? 'animate-spin text-orange-500' : ''}`}
-              title="Force Refresh Data"
-            >
-              <RefreshCw size={12} />
-            </button>
-          </div>
-
-          <button
-            onClick={() => setFitBoundsTrigger(t => t + 1)}
-            className={btnSecondaryClass}
-            title="Recenter camera to show all routes"
-          >
-            <Compass size={13} className="text-[#FF7A00]" />
-            Fit Map Bounds
-          </button>
-
-          {dashboardMode === 'simulator' && routes.length === 0 && (
-            <button
-              onClick={handleSetupMockData}
-              className={isDarkMode ? "bg-orange-500/10 text-[#FF7A00] border border-[#FF7A00]/30 px-4 py-2 rounded-xl text-xs font-bold hover:bg-orange-500/20 transition-all" : "bg-orange-50 text-[#FF7A00] border border-orange-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-orange-100 transition-all"}
-            >
-              🚀 Setup Seeds
-            </button>
-          )}
-
-          {dashboardMode === 'simulator' && (
-            <button
               onClick={() => setSimulating(p => !p)}
               className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm ${
-                simulating ? 'bg-[#FF7A00] text-white hover:bg-[#e06e00]' : (isDarkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-200 text-slate-750 hover:bg-slate-300')
+                simulating ? 'bg-[#FF7A00] text-white hover:bg-[#e06e00]' : (isDarkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-200 text-slate-750 hover:bg-slate-355')
               }`}
             >
               {simulating ? (
@@ -662,14 +740,14 @@ export default function MapTab({ token, mode: dashboardMode }) {
                 </>
               )}
             </button>
-          )}
 
-          <button
-            onClick={() => setSurveyModal(true)}
-            className="bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5 hover:brightness-110 hover:shadow-lg transition-all"
-          >
-            <Plus size={14} /> New D2D Survey
-          </button>
+            <button
+              onClick={() => setSurveyModal(true)}
+              className="bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5 hover:brightness-110 hover:shadow-lg transition-all"
+            >
+              <Plus size={14} /> New D2D Survey
+            </button>
+          </div>
         </div>
       </div>
 
@@ -718,9 +796,41 @@ export default function MapTab({ token, mode: dashboardMode }) {
                       weight={4}
                       opacity={0.9}
                     />
-                    {r.points.map((p, stopIdx) => (
-                      <Marker key={stopIdx} position={[p.lat, p.lng]} icon={createStopIcon(isDarkMode)} />
-                    ))}
+                    {r.points.map((p, stopIdx) => {
+                      const isStart = stopIdx === 0;
+                      const isEnd = stopIdx === r.points.length - 1;
+                      
+                      let markerIcon = createStopIcon(isDarkMode);
+                      if (isStart) {
+                        markerIcon = createStartIcon(isDarkMode);
+                      } else if (isEnd) {
+                        markerIcon = createEndIcon(isDarkMode);
+                      }
+
+                      return (
+                        <Marker 
+                          key={stopIdx} 
+                          position={[p.lat, p.lng]} 
+                          icon={markerIcon}
+                        >
+                          <Popup className={isDarkMode ? 'dark-popup' : ''}>
+                            <div className={`p-1.5 space-y-1 text-xs min-w-[140px] ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                              <p className="font-extrabold flex items-center gap-1.5 border-b border-slate-700/50 pb-1">
+                                {isStart ? (
+                                  <span className="text-[#10b981] font-black">🟢 Start Point</span>
+                                ) : isEnd ? (
+                                  <span className="text-[#ef4444] font-black">🔴 End Point</span>
+                                ) : (
+                                  <span className="text-[#FF7A00] font-black">📍 Stop #{stopIdx + 1}</span>
+                                )}
+                              </p>
+                              <p className="text-[10px] font-bold"><strong>Route:</strong> {r.name}</p>
+                              <p className="text-[9px] text-slate-400 font-medium">Lat: {p.lat.toFixed(5)}, Lng: {p.lng.toFixed(5)}</p>
+                            </div>
+                          </Popup>
+                        </Marker>
+                      );
+                    })}
                   </div>
                 )
               ))}
@@ -815,6 +925,14 @@ export default function MapTab({ token, mode: dashboardMode }) {
                 <div className="flex items-center gap-2">
                   <span className="w-3.5 h-1 bg-[#FF5500] rounded" />
                   <span>Planned Route</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-[#10b981] border border-white inline-block" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                  <span>🟢 Start Point</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-[#ef4444] border border-white inline-block" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                  <span>🔴 End Point</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-3.5 h-1 border-t border-dashed" style={{ borderTopWidth: '2px', borderTopColor: isDarkMode ? "#00d2ff" : "#0284c7" }} />
@@ -1183,7 +1301,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
 
       {/* Manual Survey Log Dialog */}
       {surveyModal && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center px-4 bg-black/60">
           <div className={isDarkMode ? "w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-slate-100" : "w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] text-slate-850"}>
             <div className={`flex items-center justify-between px-6 pt-5 pb-4 border-b flex-shrink-0 ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}`}>
               <h3 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>New Door-to-Door (D2D) Visit Log</h3>

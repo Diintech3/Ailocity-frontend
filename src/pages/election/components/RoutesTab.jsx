@@ -1,18 +1,65 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Plus, Navigation, Shield, Pencil, Trash2, Eye, X, CheckCircle2, AlertCircle, MapPin, Check, RotateCcw, Settings, User } from 'lucide-react'
 import { MapContainer, TileLayer, Polyline, Marker, useMapEvents } from 'react-leaflet'
-import L from 'leaflet'
+import L from '../../../lib/leafletFix'
 import { api } from '../../../lib/api'
 import 'leaflet/dist/leaflet.css'
 
 // Custom Leaflet Markers Setup
-const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FF7A00" width="30" height="30"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`
-const customIcon = L.divIcon({
-  html: iconSvg,
-  className: 'custom-leaflet-icon',
-  iconSize: [30, 30],
-  iconAnchor: [15, 30],
-})
+const createStartIcon = () => {
+  return L.divIcon({
+    html: `
+      <div style="position: relative; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+        <div style="position: absolute; width: 32px; height: 32px; border-radius: 50%; background-color: #10b981; opacity: 0.3; transform: scale(1.4); animation: pulseGreen 1.8s infinite ease-in-out;"></div>
+        <div style="position: absolute; width: 26px; height: 26px; border-radius: 50%; background-color: #10b981; border: 2.5px solid #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(0,0,0,0.3);">
+          <span style="font-size: 8px; font-weight: 900; color: #ffffff; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1;">START</span>
+        </div>
+      </div>
+      <style>
+        @keyframes pulseGreen {
+          0% { transform: scale(1); opacity: 0.5; }
+          70% { transform: scale(1.5); opacity: 0; }
+          100% { transform: scale(1); opacity: 0; }
+        }
+      </style>
+    `,
+    className: 'route-start-marker',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  })
+}
+
+const createEndIcon = () => {
+  return L.divIcon({
+    html: `
+      <div style="position: relative; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+        <div style="position: absolute; width: 32px; height: 32px; border-radius: 50%; background-color: #ef4444; opacity: 0.3; transform: scale(1.4); animation: pulseRed 1.8s infinite ease-in-out;"></div>
+        <div style="position: absolute; width: 26px; height: 26px; border-radius: 50%; background-color: #ef4444; border: 2.5px solid #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(0,0,0,0.3);">
+          <span style="font-size: 8px; font-weight: 900; color: #ffffff; text-transform: uppercase; letter-spacing: 0.5px; line-height: 1;">END</span>
+        </div>
+      </div>
+      <style>
+        @keyframes pulseRed {
+          0% { transform: scale(1); opacity: 0.5; }
+          70% { transform: scale(1.5); opacity: 0; }
+          100% { transform: scale(1); opacity: 0; }
+        }
+      </style>
+    `,
+    className: 'route-end-marker',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  })
+}
+
+const createStopIcon = () => {
+  return L.divIcon({
+    html: `<div style="width: 8px; height: 8px; border-radius: 50%; background-color: #FF5500; border: 1.5px solid #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.25);"></div>`,
+    className: 'route-stop-marker',
+    iconSize: [8, 8],
+    iconAnchor: [4, 4]
+  })
+}
 
 // Sub-component to capture clicks on Leaflet map inside Add/Edit modal
 function MapClickHandler({ onMapClick, readOnly }) {
@@ -541,13 +588,20 @@ export default function RoutesTab({ token, mode: dashboardMode }) {
                         opacity={0.95}
                       />
                       {/* Markers for Route Stops */}
-                      {modal.form.points.map((p, pIdx) => (
-                        <Marker
-                          key={pIdx}
-                          position={[p.lat, p.lng]}
-                          icon={customIcon}
-                        />
-                      ))}
+                      {modal.form.points.map((p, pIdx) => {
+                        const isStart = pIdx === 0;
+                        const isEnd = pIdx === modal.form.points.length - 1;
+                        let icon = createStopIcon();
+                        if (isStart) icon = createStartIcon();
+                        else if (isEnd) icon = createEndIcon();
+                        return (
+                          <Marker
+                            key={pIdx}
+                            position={[p.lat, p.lng]}
+                            icon={icon}
+                          />
+                        );
+                      })}
                     </>
                   )}
                 </MapContainer>
