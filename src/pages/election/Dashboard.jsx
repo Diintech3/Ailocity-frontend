@@ -3,7 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, HelpCircle, Settings as SettingsIcon,
   Menu, ChevronDown, ChevronRight, LogOut, AlertCircle, HelpCircle as HelpIcon,
-  UserCheck, Navigation, Map, Shield, Activity, Footprints
+  UserCheck, Navigation, Map, Shield, Activity, Footprints, ClipboardList, Flag, Contact
 } from 'lucide-react'
 import { api, TOKEN_ELECTION, TOKEN_CLIENT } from '../../lib/api'
 import CandidatesTab from './components/CandidatesTab'
@@ -13,13 +13,19 @@ import MapTab from './components/MapTab'
 import VotersTab from './components/VotersTab'
 import SabhaTab from './components/SabhaTab'
 import PadyatraTab from './components/PadyatraTab'
+import D2DCampaignTab from './components/D2DCampaignTab'
+import RallyTab from './components/RallyTab'
+import TeamTab from './components/TeamTab'
 
 const TABS = [
   { id: 'overview',   label: 'Overview',            icon: LayoutDashboard },
   { id: 'map',        label: 'Live Map',            icon: Map },
+  { id: 'd2d-campaign', label: 'D2D Campaign',       icon: ClipboardList },
   { id: 'routes',     label: 'Routes',              icon: Navigation },
   { id: 'volunteers', label: 'Volunteers',          icon: UserCheck },
   { id: 'candidates', label: 'Candidates',          icon: Users },
+  { id: 'rally',        label: 'Rally',              icon: Flag },
+  { id: 'team',         label: 'Team Members',       icon: Contact },
   { id: 'voters',     label: 'Voters',              icon: Users },
   { id: 'sabha',      label: 'Sabha (Public)',      icon: Shield },
   { id: 'padyatra',   label: 'Padyatra',            icon: Footprints },
@@ -303,6 +309,21 @@ export default function ElectionDashboard() {
               {/* Voters Tab Content */}
               {active === 'voters' && (
                 <VotersTab />
+              )}
+
+              {/* D2D Campaign Tab Content */}
+              {active === 'd2d-campaign' && (
+                <D2DCampaignTab token={token} />
+              )}
+
+              {/* Rally Tab Content */}
+              {active === 'rally' && (
+                <RallyTab token={token} />
+              )}
+
+              {/* Team Tab Content */}
+              {active === 'team' && (
+                <TeamTab token={token} />
               )}
 
               {/* Sabha Tab Content */}

@@ -206,9 +206,34 @@ function MapController({ selectedVol, followMode, routes, fitBoundsTrigger, mapT
   return null
 }
 
+function CustomZoomControls() {
+  const map = useMap()
+  return (
+    <div className="absolute top-4 left-4 z-[1000] flex flex-col gap-1.5 pointer-events-auto">
+      <button
+        type="button"
+        onClick={() => map.zoomIn()}
+        className="w-8 h-8 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white font-extrabold flex items-center justify-center shadow-md hover:bg-orange-100 dark:hover:bg-slate-800 active:scale-95 transition-all text-sm"
+        title="Zoom In"
+      >
+        ＋
+      </button>
+      <button
+        type="button"
+        onClick={() => map.zoomOut()}
+        className="w-8 h-8 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white font-extrabold flex items-center justify-center shadow-md hover:bg-orange-100 dark:hover:bg-slate-800 active:scale-95 transition-all text-sm"
+        title="Zoom Out"
+      >
+        －
+      </button>
+    </div>
+  )
+}
+
 export default function MapTab({ token, mode: dashboardMode }) {
   const [volunteers, setVolunteers] = useState([])
   const [routes, setRoutes] = useState([])
+  const [selectedRouteId, setSelectedRouteId] = useState('')
   const [surveys, setSurveys] = useState([])
   const [houses, setHouses] = useState([])
   const [loading, setLoading] = useState(true)
@@ -525,6 +550,28 @@ export default function MapTab({ token, mode: dashboardMode }) {
     }
   }
 
+  const handleRouteFilterChange = (e) => {
+    const routeId = e.target.value
+    setSelectedRouteId(routeId)
+    if (routeId) {
+      const assignedVol = volunteers.find(v => v.assignedRouteId === routeId)
+      if (assignedVol) {
+        setSelectedVol(assignedVol)
+        setFollowMode(true)
+      } else {
+        setSelectedVol(null)
+        setFollowMode(false)
+      }
+      const route = routes.find(r => r.id === routeId)
+      if (route && route.points && route.points.length > 0) {
+        setMapTarget({ lat: route.points[0].lat, lng: route.points[0].lng, zoom: 15, trigger: Date.now() })
+      }
+    } else {
+      setSelectedVol(null)
+      setFollowMode(false)
+    }
+  }
+
   // Filtering list data
   const filteredSurveys = surveys.filter(s => {
     const stsMatch = filterSupport === 'all' || s.politicalFeedback?.supportStatus === filterSupport
@@ -761,6 +808,24 @@ export default function MapTab({ token, mode: dashboardMode }) {
 
           {/* Row 2: Action Triggers */}
           <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2.5">
+            {/* Route filter selector */}
+            <div className={`flex items-center gap-2 border px-3 py-1.5 rounded-xl text-xs font-bold ${isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-100 border-slate-200/80 text-slate-700'}`}>
+              <span className={isDarkMode ? 'text-slate-400' : 'text-slate-500'}>Route:</span>
+              <select
+                value={selectedRouteId}
+                onChange={handleRouteFilterChange}
+                className="bg-transparent border-none focus:outline-none cursor-pointer pr-4 font-black"
+                style={{ color: '#FF7A00' }}
+              >
+                <option value="" className={isDarkMode ? 'bg-slate-950 text-slate-200' : 'bg-white text-slate-800'}>All Routes</option>
+                {routes.map(r => (
+                  <option key={r.id} value={r.id} className={isDarkMode ? 'bg-slate-950 text-slate-200' : 'bg-white text-slate-800'}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <button
               onClick={() => setFitBoundsTrigger(t => t + 1)}
               className={btnSecondaryClass}
@@ -815,7 +880,8 @@ export default function MapTab({ token, mode: dashboardMode }) {
           <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 h-[72vh] min-h-[500px]">
           {/* Main Map View with dynamic vector layers */}
           <div className={mapFrameClass}>
-            <MapContainer center={[26.8467, 80.9462]} zoom={13} style={{ height: '100%', width: '100%', zIndex: 10 }}>
+            <MapContainer center={[26.8467, 80.9462]} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%', zIndex: 10 }}>
+              <CustomZoomControls />
               {isDarkMode ? (
                 <TileLayer
                   url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
@@ -838,22 +904,30 @@ export default function MapTab({ token, mode: dashboardMode }) {
               />
 
               {/* Draw Route Polylines (styled based on dark mode) */}
-              {routes.map(r => (
-                r.points && r.points.length > 0 && (
+              {routes.map(r => {
+                const isSelectedRoute = selectedRouteId === r.id;
+                const isAnyRouteSelected = selectedRouteId !== '';
+                const opacityOuter = isAnyRouteSelected ? (isSelectedRoute ? 0.95 : 0.25) : 0.8;
+                const opacityInner = isAnyRouteSelected ? (isSelectedRoute ? 1.0 : 0.3) : 0.9;
+                const weightOuter = isSelectedRoute ? 12 : 8;
+                const weightInner = isSelectedRoute ? 6 : 4;
+                const colorInner = isSelectedRoute ? '#FF3300' : '#FF5500';
+
+                return r.points && r.points.length > 0 && (
                   <div key={r.id}>
                     <Polyline
                       positions={r.points.map(p => [p.lat, p.lng])}
                       color={isDarkMode ? "#0f172a" : "#ffffff"}
-                      weight={8}
-                      opacity={0.8}
+                      weight={weightOuter}
+                      opacity={opacityOuter}
                     />
                     <Polyline
                       positions={r.points.map(p => [p.lat, p.lng])}
-                      color="#FF5500"
-                      weight={4}
-                      opacity={0.9}
+                      color={colorInner}
+                      weight={weightInner}
+                      opacity={opacityInner}
                     />
-                    {r.points.map((p, stopIdx) => {
+                    {(!isAnyRouteSelected || isSelectedRoute) && r.points.map((p, stopIdx) => {
                       const isStart = stopIdx === 0;
                       const isEnd = stopIdx === r.points.length - 1;
                       
@@ -890,7 +964,7 @@ export default function MapTab({ token, mode: dashboardMode }) {
                     })}
                   </div>
                 )
-              ))}
+              })}
 
               {/* Plotted Walked Telemetry Path (Electric Cyan vs Dark Blue) */}
               {selectedVol && selectedVol.locationHistory && selectedVol.locationHistory.length > 0 && (

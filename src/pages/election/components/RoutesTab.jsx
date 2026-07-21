@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Plus, Navigation, Shield, Pencil, Trash2, Eye, X, CheckCircle2, AlertCircle, MapPin, Check, RotateCcw, Settings, User } from 'lucide-react'
-import { MapContainer, TileLayer, Polyline, Marker, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Polyline, Marker, useMapEvents, useMap } from 'react-leaflet'
 import L from '../../../lib/leafletFix'
 import { api } from '../../../lib/api'
 import 'leaflet/dist/leaflet.css'
@@ -87,6 +87,30 @@ function MapClickHandler({ onMapClick, readOnly }) {
     },
   })
   return null
+}
+
+function CustomZoomControls() {
+  const map = useMap()
+  return (
+    <div className="absolute top-4 left-4 z-[1000] flex flex-col gap-1.5 pointer-events-auto">
+      <button
+        type="button"
+        onClick={() => map.zoomIn()}
+        className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-800 font-extrabold flex items-center justify-center shadow-md hover:bg-orange-50 active:scale-95 transition-all text-sm"
+        title="Zoom In"
+      >
+        ＋
+      </button>
+      <button
+        type="button"
+        onClick={() => map.zoomOut()}
+        className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-800 font-extrabold flex items-center justify-center shadow-md hover:bg-orange-50 active:scale-95 transition-all text-sm"
+        title="Zoom Out"
+      >
+        －
+      </button>
+    </div>
+  )
 }
 
 // Gear actions dropdown
@@ -650,7 +674,8 @@ export default function RoutesTab({ token, mode: dashboardMode }) {
                     📌 Map click karke route stops add karein (Line automatically ban jayegi).
                   </div>
                 )}
-                        <MapContainer center={[26.8467, 80.9462]} zoom={13} style={{ height: '100%', width: '100%', zIndex: 10 }}>
+                        <MapContainer center={[26.8467, 80.9462]} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%', zIndex: 10 }}>
+                  <CustomZoomControls />
                   <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
