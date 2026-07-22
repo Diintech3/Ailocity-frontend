@@ -230,7 +230,7 @@ function CustomZoomControls() {
   )
 }
 
-export default function MapTab({ token, mode: dashboardMode }) {
+export default function MapTab({ token, mode: dashboardMode, runningCampaign, onClearRunningCampaign }) {
   const [volunteers, setVolunteers] = useState([])
   const [routes, setRoutes] = useState([])
   const [selectedRouteId, setSelectedRouteId] = useState('')
@@ -303,6 +303,57 @@ export default function MapTab({ token, mode: dashboardMode }) {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  // Handle auto-triggering running campaign simulations on Map
+  useEffect(() => {
+    if (runningCampaign && runningCampaign.routeId) {
+      setSelectedRouteId(runningCampaign.routeId)
+      const targetVol = volunteers.find(v => v.id === runningCampaign.volunteerId)
+      if (targetVol) {
+        setSelectedVol(targetVol)
+        setFollowMode(true)
+        if (targetVol.lastKnownLocation) {
+          setMapTarget({
+            lat: targetVol.lastKnownLocation.lat,
+            lng: targetVol.lastKnownLocation.lng,
+            zoom: 16
+          })
+        }
+      } else {
+        const route = routes.find(r => r.id === runningCampaign.routeId)
+        if (route && route.points && route.points.length > 0) {
+          setMapTarget({ lat: route.points[0].lat, lng: route.points[0].lng, zoom: 15 })
+        }
+      }
+      setSimulating(true)
+    }
+  }, [runningCampaign, volunteers, routes])
+
+  const handleCompleteRunningCampaign = async () => {
+    if (!runningCampaign) return
+    try {
+      setLoading(true)
+      const updated = await api(`/api/election-campaign/d2d-campaigns/${runningCampaign.id}`, {
+        method: 'PATCH',
+        token,
+        body: { status: 'completed' }
+      })
+      setSuccess('D2D Campaign completed successfully!')
+      setTimeout(() => setSuccess(''), 3000)
+      if (onClearRunningCampaign) {
+        onClearRunningCampaign()
+      }
+      setSimulating(false)
+      setSelectedRouteId('')
+      setSelectedVol(null)
+      setFollowMode(false)
+      await loadData()
+    } catch (err) {
+      alert(err.message || 'Failed to complete campaign')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Sync selected volunteer location details when volunteers list updates
   useEffect(() => {
@@ -623,8 +674,8 @@ export default function MapTab({ token, mode: dashboardMode }) {
     : "flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-md text-slate-800 transition-all duration-300"
 
   const sidebarClass = isDarkMode
-    ? "xl:col-span-1 flex flex-col bg-slate-900 rounded-2xl border border-slate-850 shadow-2xl p-4 overflow-hidden h-full min-h-0 text-slate-100 transition-all duration-300"
-    : "xl:col-span-1 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-lg p-4 overflow-hidden h-full min-h-0 text-slate-800 transition-all duration-300"
+    ? "xl:col-span-1 flex flex-col bg-slate-900 rounded-2xl border border-slate-850 shadow-2xl p-4 overflow-hidden h-[450px] xl:h-full min-h-0 text-slate-100 transition-all duration-300"
+    : "xl:col-span-1 flex flex-col bg-white rounded-2xl border border-slate-200 shadow-lg p-4 overflow-hidden h-[450px] xl:h-full min-h-0 text-slate-800 transition-all duration-300"
 
   const tabBtnClass = (active) => active
     ? "flex-1 py-2 text-xs font-bold rounded-xl border transition-all " + (isDarkMode ? "bg-orange-500/10 text-[#FF7A00] border-[#FF7A00]/30" : "bg-orange-50 text-[#FF7A00] border-orange-200")
@@ -647,8 +698,8 @@ export default function MapTab({ token, mode: dashboardMode }) {
     : "border border-slate-100 rounded-xl p-3.5 bg-slate-50/50 hover:bg-white hover:shadow-sm transition-all duration-200 text-xs relative overflow-hidden"
 
   const legendClass = isDarkMode
-    ? "absolute bottom-5 right-5 z-[1000] bg-slate-900/95 backdrop-blur-md border border-slate-800 p-3.5 rounded-2xl shadow-2xl text-[11px] space-y-2 max-w-[200px] pointer-events-auto text-slate-200 transition-colors duration-300"
-    : "absolute bottom-5 right-5 z-[1000] bg-white/95 backdrop-blur-sm border border-slate-250 p-3.5 rounded-2xl shadow-xl text-[11px] space-y-2 max-w-[200px] pointer-events-auto text-slate-700 transition-colors duration-300"
+    ? "absolute bottom-5 right-5 z-[1000] bg-slate-900/95 backdrop-blur-md border border-slate-800 p-3.5 rounded-2xl shadow-2xl text-[11px] space-y-2 max-w-[180px] sm:max-w-[200px] pointer-events-auto text-slate-200 transition-colors duration-300"
+    : "absolute bottom-5 right-5 z-[1000] bg-white/95 backdrop-blur-sm border border-slate-250 p-3.5 rounded-2xl shadow-xl text-[11px] space-y-2 max-w-[180px] sm:max-w-[200px] pointer-events-auto text-slate-700 transition-colors duration-300"
 
   const pollClass = isDarkMode
     ? "flex items-center gap-2.5 bg-slate-950 border border-slate-850 px-3.5 py-2 rounded-xl text-xs font-bold"
@@ -659,8 +710,8 @@ export default function MapTab({ token, mode: dashboardMode }) {
     : "bg-white text-[#FF7A00] border border-orange-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-orange-50 transition-all flex items-center gap-1.5 shadow-sm"
 
   const mapFrameClass = isDarkMode
-    ? "xl:col-span-3 bg-slate-900 rounded-2xl border border-slate-850 overflow-hidden shadow-2xl relative h-full transition-colors duration-300"
-    : "xl:col-span-3 bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-md relative h-full transition-colors duration-300"
+    ? "xl:col-span-3 bg-slate-900 rounded-2xl border border-slate-850 overflow-hidden shadow-2xl relative h-[450px] xl:h-full transition-colors duration-300"
+    : "xl:col-span-3 bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-md relative h-[450px] xl:h-full transition-colors duration-300"
 
   const controlThemePanelClass = isDarkMode
     ? "flex items-center p-0.5 rounded-xl border bg-slate-950 border-slate-800"
@@ -877,9 +928,67 @@ export default function MapTab({ token, mode: dashboardMode }) {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 h-[72vh] min-h-[500px]">
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 xl:h-[72vh]">
           {/* Main Map View with dynamic vector layers */}
           <div className={mapFrameClass}>
+            {/* Premium D2D Campaign Telemetry Banner */}
+            {runningCampaign && (
+              <div className="absolute top-4 right-4 z-[4000] max-w-sm w-full bg-slate-900/90 backdrop-blur-md border border-blue-500/30 rounded-2xl p-4 text-white shadow-2xl flex flex-col gap-3 font-semibold text-xs leading-relaxed animate-fade-in">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="flex h-2.5 w-2.5 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                    </span>
+                    <span className="text-[10px] font-black uppercase text-blue-400 tracking-wider">Live D2D Campaign running</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (onClearRunningCampaign) {
+                        onClearRunningCampaign()
+                      }
+                    }}
+                    className="text-slate-400 hover:text-white transition-colors"
+                    title="Exit tracking mode"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+
+                <div className="space-y-1">
+                  <h4 className="text-sm font-black text-white leading-snug">{runningCampaign.title}</h4>
+                  <p className="text-[11px] text-slate-400 font-medium line-clamp-1">{runningCampaign.description}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/60 text-[10px] text-slate-300 font-semibold">
+                  <div>
+                    <span className="text-[9px] uppercase tracking-wider text-slate-500 block mb-0.5">Deploy Volunteer</span>
+                    <span className="text-white font-bold flex items-center gap-1">👤 {runningCampaign.volunteerName}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase tracking-wider text-slate-500 block mb-0.5">Assigned Route</span>
+                    <span className="text-orange-400 font-bold flex items-center gap-1">🧭 {runningCampaign.routeName}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+                  <span className="flex items-center gap-1">
+                    🕒 Start: {runningCampaign.startTime ? new Date(runningCampaign.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    🏁 End: {runningCampaign.endTime ? new Date(runningCampaign.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCompleteRunningCampaign}
+                  className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black py-2 rounded-xl text-xs shadow-md hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                >
+                  ✓ Complete Campaign
+                </button>
+              </div>
+            )}
             <MapContainer center={[26.8467, 80.9462]} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%', zIndex: 10 }}>
               <CustomZoomControls />
               {isDarkMode ? (

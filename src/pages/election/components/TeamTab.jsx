@@ -249,6 +249,7 @@ export default function TeamTab({ token }) {
                   <th className="px-4 py-3">Contact</th>
                   <th className="px-4 py-3">Demographics</th>
                   <th className="px-4 py-3">Address</th>
+                  <th className="px-4 py-3">Joined Date</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -265,7 +266,7 @@ export default function TeamTab({ token }) {
                   return (
                     <tr key={m.id} className="hover:bg-slate-50/40 transition-colors">
                       <td className="px-4 py-3.5 space-y-0.5">
-                        <strong className="text-sm text-slate-800 block">{m.name}</strong>
+                        <strong className="text-sm text-slate-800 block truncate" title={m.name}>{m.name}</strong>
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-black text-[10px] uppercase ${positionColors}`}>
@@ -292,6 +293,17 @@ export default function TeamTab({ token }) {
                           </span>
                         ) : (
                           <span className="text-slate-400 italic">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-slate-600 font-semibold">
+                        <span className="flex items-center gap-1">
+                          <Calendar size={12} className="text-slate-400" />
+                          {m.createdAt ? new Date(m.createdAt).toLocaleDateString([], { dateStyle: 'medium' }) : '—'}
+                        </span>
+                        {m.createdAt && (
+                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                            🕒 {new Date(m.createdAt).toLocaleTimeString([], { timeStyle: 'short' })}
+                          </span>
                         )}
                       </td>
                       <td className="px-4 py-3.5 text-right whitespace-nowrap">

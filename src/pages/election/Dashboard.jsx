@@ -3,7 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Users, HelpCircle, Settings as SettingsIcon,
   Menu, ChevronDown, ChevronRight, LogOut, AlertCircle, HelpCircle as HelpIcon,
-  UserCheck, Navigation, Map, Shield, Activity, Footprints, ClipboardList, Flag, Contact
+  UserCheck, Navigation, Map, Shield, Activity, Footprints, ClipboardList, Flag, Contact, UserCog
 } from 'lucide-react'
 import { api, TOKEN_ELECTION, TOKEN_CLIENT } from '../../lib/api'
 import CandidatesTab from './components/CandidatesTab'
@@ -16,6 +16,7 @@ import PadyatraTab from './components/PadyatraTab'
 import D2DCampaignTab from './components/D2DCampaignTab'
 import RallyTab from './components/RallyTab'
 import TeamTab from './components/TeamTab'
+import UsersTab from './components/UsersTab'
 
 const TABS = [
   { id: 'overview',   label: 'Overview',            icon: LayoutDashboard },
@@ -26,6 +27,7 @@ const TABS = [
   { id: 'candidates', label: 'Candidates',          icon: Users },
   { id: 'rally',        label: 'Rally',              icon: Flag },
   { id: 'team',         label: 'Team Members',       icon: Contact },
+  { id: 'users',        label: 'Users',              icon: UserCog },
   { id: 'voters',     label: 'Voters',              icon: Users },
   { id: 'sabha',      label: 'Sabha (Public)',      icon: Shield },
   { id: 'padyatra',   label: 'Padyatra',            icon: Footprints },
@@ -49,6 +51,7 @@ export default function ElectionDashboard() {
   const [error, setError] = useState('')
   const [dropOpen, setDropOpen] = useState(false)
   const [simSubTab, setSimSubTab] = useState('map') // 'map' | 'volunteers' | 'routes'
+  const [runningCampaign, setRunningCampaign] = useState(null)
 
   // Fetch election context and candidates list
   const loadData = async () => {
@@ -87,10 +90,20 @@ export default function ElectionDashboard() {
   }, {})
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 font-sans">
+    <div className="flex h-screen overflow-hidden bg-slate-50 font-sans relative">
+      {/* Mobile Backdrop Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 md:hidden transition-opacity"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside
-        className={`transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-[72px]'} flex flex-col flex-shrink-0 border-r border-orange-200`}
+        className={`fixed md:static inset-y-0 left-0 z-50 transition-all duration-300 ${
+          sidebarOpen ? 'w-64 translate-x-0' : 'w-64 -translate-x-full md:w-[72px] md:translate-x-0'
+        } flex flex-col flex-shrink-0 border-r border-orange-200 shadow-xl md:shadow-none`}
         style={{ background: 'linear-gradient(180deg, #FFFDFB 0%, #FFF5EB 100%)' }}
       >
         {/* Logo Section */}
@@ -98,78 +111,92 @@ export default function ElectionDashboard() {
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#FF7A00] to-[#FFB000] flex items-center justify-center flex-shrink-0 shadow-md">
             <Users size={18} className="text-white" />
           </div>
-          {sidebarOpen && (
-            <div className="overflow-hidden">
-              <p className="truncate text-sm font-bold text-slate-800">{me?.businessName || 'Ailocity Election'}</p>
-              <p className="truncate text-xs text-orange-600 font-medium">Election Management</p>
-            </div>
-          )}
+          <div className={`overflow-hidden ${!sidebarOpen && 'md:hidden'}`}>
+            <p className="truncate text-sm font-bold text-slate-800">{me?.businessName || 'Ailocity Election'}</p>
+            <p className="truncate text-xs text-orange-600 font-medium">Election Management</p>
+          </div>
         </div>
 
         {/* Top Navigation */}
-        <nav className="flex-1 space-y-1 p-2 mt-4">
+        <nav className="flex-1 space-y-1 p-2 mt-2 overflow-y-auto">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setActive(id)}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
+              onClick={() => {
+                setActive(id)
+                if (window.innerWidth < 768) setSidebarOpen(false)
+              }}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
                 active === id
                   ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-md'
                   : 'text-slate-600 hover:bg-orange-100/50 hover:text-slate-800'
               }`}
             >
               <Icon size={18} className="flex-shrink-0" />
-              {sidebarOpen && <span>{label}</span>}
+              <span className={!sidebarOpen ? 'md:hidden' : ''}>{label}</span>
             </button>
           ))}
         </nav>
 
         {/* Bottom Navigation */}
-        <div className="border-t border-orange-200 p-2 space-y-1 mb-2 bg-orange-50/30">
+        <div className="border-t border-orange-200 p-2 space-y-1 bg-orange-50/30">
           {BOTTOM_TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setActive(id)}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
+              onClick={() => {
+                setActive(id)
+                if (window.innerWidth < 768) setSidebarOpen(false)
+              }}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
                 active === id
                   ? 'bg-gradient-to-r from-[#FF7A00] to-[#FFB000] text-white shadow-md'
                   : 'text-slate-600 hover:bg-orange-100/50 hover:text-slate-800'
               }`}
             >
               <Icon size={18} className="flex-shrink-0" />
-              {sidebarOpen && <span>{label}</span>}
+              <span className={!sidebarOpen ? 'md:hidden' : ''}>{label}</span>
             </button>
           ))}
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-hidden flex flex-col">
+      <main className="flex-1 overflow-hidden flex flex-col w-full min-w-0">
         {/* Header */}
-        <header className="flex h-[65px] items-center justify-between border-b border-slate-200 bg-white px-6 flex-shrink-0 shadow-sm">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setSidebarOpen(s => !s)} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 transition-colors">
-              <Menu size={18} />
+        <header className="flex h-[65px] items-center justify-between border-b border-slate-200 bg-white px-3 sm:px-6 flex-shrink-0 shadow-sm">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <button onClick={() => setSidebarOpen(s => !s)} className="rounded-xl p-2 text-slate-600 hover:bg-slate-100 transition-colors flex-shrink-0">
+              <Menu size={20} />
             </button>
-            <div>
-              <h1 className="font-bold text-slate-900 text-base">{heading}</h1>
-              <p className="flex items-center gap-1 text-xs text-slate-500 font-medium">
+            <div className="min-w-0">
+              <h1 className="font-bold text-slate-900 text-sm sm:text-base truncate">{heading}</h1>
+              <p className="hidden sm:flex items-center gap-1 text-xs text-slate-500 font-medium">
                 Election <ChevronRight size={10} /> {heading}
               </p>
             </div>
           </div>
 
-          {/* User Profile Action Dropdown */}
-          <div className="relative">
+          {/* Header Action Buttons */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => navigate('/election/app')}
+              className="bg-orange-50 hover:bg-orange-100 text-[#FF7A00] border border-orange-200 px-3 py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-xs"
+              title="Open Mobile Field User App"
+            >
+              <span>📱 Mobile Field App</span>
+            </button>
+
+            {/* User Profile Action Dropdown */}
+            <div className="relative flex-shrink-0">
             <button
               onClick={() => setDropOpen(!dropOpen)}
-              className="flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50/50 px-3 py-1.5 text-sm hover:bg-orange-100/50 transition-colors"
+              className="flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50/50 px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm hover:bg-orange-100/50 transition-colors"
             >
-              <div className="w-6 h-6 rounded-full bg-[#FF7A00] text-white text-xs font-bold flex items-center justify-center">
+              <div className="w-6 h-6 rounded-full bg-[#FF7A00] text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
                 E
               </div>
-              <span className="font-semibold text-slate-800 max-w-[120px] truncate">{me?.fullName || 'Election Admin'}</span>
-              <ChevronDown size={14} className="text-slate-500" />
+              <span className="font-semibold text-slate-800 max-w-[90px] sm:max-w-[120px] truncate">{me?.fullName || 'Election Admin'}</span>
+              <ChevronDown size={14} className="text-slate-500 flex-shrink-0" />
             </button>
 
             {dropOpen && (
@@ -187,10 +214,11 @@ export default function ElectionDashboard() {
               </>
             )}
           </div>
-        </header>
+        </div>
+      </header>
 
         {/* Scrollable View Area */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-50">
           {loading ? (
             <div className="flex h-full items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF7A00]" />
@@ -303,7 +331,12 @@ export default function ElectionDashboard() {
 
               {/* Map Tab Content */}
               {active === 'map' && (
-                <MapTab token={token} mode="real" />
+                <MapTab 
+                  token={token} 
+                  mode="real" 
+                  runningCampaign={runningCampaign}
+                  onClearRunningCampaign={() => setRunningCampaign(null)}
+                />
               )}
 
               {/* Voters Tab Content */}
@@ -313,7 +346,13 @@ export default function ElectionDashboard() {
 
               {/* D2D Campaign Tab Content */}
               {active === 'd2d-campaign' && (
-                <D2DCampaignTab token={token} />
+                <D2DCampaignTab 
+                  token={token} 
+                  onRunCampaign={(campaign) => {
+                    setRunningCampaign(campaign);
+                    setActive('map');
+                  }}
+                />
               )}
 
               {/* Rally Tab Content */}
@@ -324,6 +363,11 @@ export default function ElectionDashboard() {
               {/* Team Tab Content */}
               {active === 'team' && (
                 <TeamTab token={token} />
+              )}
+
+              {/* Users Tab Content */}
+              {active === 'users' && (
+                <UsersTab token={token} />
               )}
 
               {/* Sabha Tab Content */}

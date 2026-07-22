@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, Trash2, CheckCircle, Clock, Users, Navigation, Shield, FileText, X, Sparkles, Check, AlertCircle, Flag, User, Settings } from 'lucide-react'
+import { Plus, Search, Trash2, CheckCircle, Clock, Users, Navigation, Shield, FileText, X, Sparkles, Check, AlertCircle, Flag, User, Settings, Calendar } from 'lucide-react'
 import { api } from '../../../lib/api'
 
 export default function RallyTab({ token }) {
@@ -321,6 +321,7 @@ export default function RallyTab({ token }) {
                   <th className="px-4 py-3">Organized Sabha</th>
                   <th className="px-4 py-3">Sabha Coord</th>
                   <th className="px-4 py-3">Rally In-Charge</th>
+                  <th className="px-4 py-3">Date & Time</th>
                   <th className="px-4 py-3 text-center">Status</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
@@ -333,9 +334,8 @@ export default function RallyTab({ token }) {
 
                   return (
                     <tr key={r.id} className="hover:bg-slate-50/40 transition-colors">
-                      <td className="px-4 py-3.5 space-y-0.5">
-                        <strong className="text-sm text-slate-800 block">{r.title}</strong>
-                        <span className="text-xs text-slate-450 block font-normal leading-relaxed">{r.description}</span>
+                      <td className="px-4 py-3.5 max-w-[240px]">
+                        <strong className="text-sm text-slate-800 block truncate" title={r.title}>{r.title}</strong>
                       </td>
                       <td className="px-4 py-3.5 text-slate-650">
                         <span className="flex items-center gap-1 font-semibold">
@@ -367,6 +367,17 @@ export default function RallyTab({ token }) {
                           </span>
                         ) : (
                           <span className="text-slate-400 italic">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-slate-600 font-semibold">
+                        <span className="flex items-center gap-1">
+                          <Calendar size={12} className="text-slate-400" />
+                          {r.createdAt ? new Date(r.createdAt).toLocaleDateString([], { dateStyle: 'medium' }) : '—'}
+                        </span>
+                        {r.createdAt && (
+                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                            🕒 {new Date(r.createdAt).toLocaleTimeString([], { timeStyle: 'short' })}
+                          </span>
                         )}
                       </td>
                       <td className="px-4 py-3.5 text-center whitespace-nowrap">

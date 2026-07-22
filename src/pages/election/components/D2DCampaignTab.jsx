@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, Trash2, CheckCircle, Clock, Users, Navigation, Shield, FileText, X, Sparkles, Check, AlertCircle, Settings } from 'lucide-react'
+import { Plus, Search, Trash2, CheckCircle, Clock, Users, Navigation, Shield, FileText, X, Sparkles, Check, AlertCircle, Settings, Calendar } from 'lucide-react'
 import { api } from '../../../lib/api'
 
-export default function D2DCampaignTab({ token }) {
+export default function D2DCampaignTab({ token, onRunCampaign }) {
   const [campaigns, setCampaigns] = useState([])
   const [volunteers, setVolunteers] = useState([])
   const [routes, setRoutes] = useState([])
@@ -28,17 +28,9 @@ export default function D2DCampaignTab({ token }) {
     description: '',
     volunteerId: '',
     routeId: '',
-    sabhaId: '',
-    sabhaName: '',
+    startTime: '',
+    endTime: '',
   })
-
-  // List of mock Sabhas (since Sabha Planner is not implemented yet)
-  const mockSabhas = [
-    { id: 'sbh_chowk', name: 'Chowk Market Assembly' },
-    { id: 'sbh_hazrat', name: 'Hazratganj Park Assembly' },
-    { id: 'sbh_central', name: 'Lucknow Central Meet' },
-    { id: 'sbh_indira', name: 'Indira Nagar Sabha' },
-  ]
 
   const loadData = async () => {
     try {
@@ -72,8 +64,8 @@ export default function D2DCampaignTab({ token }) {
       description: '',
       volunteerId: '',
       routeId: '',
-      sabhaId: '',
-      sabhaName: '',
+      startTime: '',
+      endTime: '',
     })
     setModalOpen(true)
   }
@@ -87,8 +79,8 @@ export default function D2DCampaignTab({ token }) {
       description: c.description,
       volunteerId: c.volunteerId || '',
       routeId: c.routeId || '',
-      sabhaId: c.sabhaId || '',
-      sabhaName: c.sabhaName || '',
+      startTime: c.startTime || '',
+      endTime: c.endTime || '',
     })
     setModalOpen(true)
   }
@@ -102,8 +94,8 @@ export default function D2DCampaignTab({ token }) {
       description: c.description,
       volunteerId: c.volunteerId || '',
       routeId: c.routeId || '',
-      sabhaId: c.sabhaId || '',
-      sabhaName: c.sabhaName || '',
+      startTime: c.startTime || '',
+      endTime: c.endTime || '',
     })
     setModalOpen(true)
   }
@@ -114,8 +106,6 @@ export default function D2DCampaignTab({ token }) {
       alert('Please fill in Title, Description, Volunteer, and Route.')
       return
     }
-
-    const selectedSabha = mockSabhas.find(s => s.id === form.sabhaId)
 
     try {
       setError('')
@@ -128,8 +118,8 @@ export default function D2DCampaignTab({ token }) {
             description: form.description,
             volunteerId: form.volunteerId,
             routeId: form.routeId,
-            sabhaId: selectedSabha ? selectedSabha.id : '',
-            sabhaName: selectedSabha ? selectedSabha.name : '',
+            startTime: form.startTime,
+            endTime: form.endTime,
           },
         })
         setCampaigns(prev => prev.map(c => c.id === selectedId ? res.campaign : c))
@@ -143,8 +133,8 @@ export default function D2DCampaignTab({ token }) {
             description: form.description,
             volunteerId: form.volunteerId,
             routeId: form.routeId,
-            sabhaId: selectedSabha ? selectedSabha.id : '',
-            sabhaName: selectedSabha ? selectedSabha.name : '',
+            startTime: form.startTime,
+            endTime: form.endTime,
             status: 'active',
           },
         })
@@ -159,7 +149,7 @@ export default function D2DCampaignTab({ token }) {
   }
 
   const handleToggleStatus = async (id, currentStatus) => {
-    const nextStatus = currentStatus === 'active' ? 'completed' : 'active'
+    const nextStatus = currentStatus === 'completed' ? 'active' : 'completed'
     try {
       await api(`/api/election-campaign/d2d-campaigns/${id}`, {
         method: 'PATCH',
@@ -206,9 +196,11 @@ export default function D2DCampaignTab({ token }) {
 
   // Stats
   const totalCampaigns = campaigns.length
-  const activeCount = campaigns.filter(c => c.status === 'active').length
+  const activeCount = campaigns.filter(c => c.status === 'active' || c.status === 'running').length
   const completedCount = campaigns.filter(c => c.status === 'completed').length
   const uniqueVolunteersCount = new Set(campaigns.map(c => c.volunteerId)).size
+
+  const currentCampaign = campaigns.find(c => c.id === selectedId)
 
   return (
     <div className="space-y-6">
@@ -233,8 +225,8 @@ export default function D2DCampaignTab({ token }) {
             <Sparkles size={18} className="text-[#FF7A00]" />
             Door-to-Door (D2D) Campaigns Planner
           </h2>
-          <p className="text-xs text-slate-550 mt-1">
-            Create D2D surveys, assign volunteers to routes, align meetings with Sabha assemblies, and track completion.
+          <p className="text-xs text-slate-500 mt-1">
+            Create D2D surveys, assign volunteers to routes, schedule campaigns, and track execution live.
           </p>
         </div>
         <button
@@ -265,7 +257,7 @@ export default function D2DCampaignTab({ token }) {
         <div className="bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-300">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Volunteers</p>
           <h3 className="text-2xl font-black text-slate-800 mt-2">{uniqueVolunteersCount}</h3>
-          <p className="text-xs text-slate-550 mt-1">Deployed in campaigns</p>
+          <p className="text-xs text-slate-555 mt-1">Deployed in campaigns</p>
         </div>
       </div>
 
@@ -294,6 +286,7 @@ export default function D2DCampaignTab({ token }) {
             >
               <option value="all">All Status</option>
               <option value="active">Active Only</option>
+              <option value="running">Running Only</option>
               <option value="completed">Completed Only</option>
             </select>
           </div>
@@ -317,22 +310,23 @@ export default function D2DCampaignTab({ token }) {
                   <th className="px-4 py-3">Campaign Info</th>
                   <th className="px-4 py-3">Volunteer</th>
                   <th className="px-4 py-3">Assigned Route</th>
-                  <th className="px-4 py-3">Sabha Assembly</th>
+                  <th className="px-4 py-3">Campaign Duration</th>
                   <th className="px-4 py-3 text-center">Status</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 font-medium">
                 {filteredCampaigns.map(c => {
-                  const statusColors = c.status === 'active' 
-                    ? 'bg-orange-50 text-orange-600'
-                    : 'bg-emerald-50 text-emerald-600'
+                  const statusColors = c.status === 'completed'
+                    ? 'bg-emerald-50 text-emerald-600'
+                    : c.status === 'running'
+                    ? 'bg-blue-50 text-blue-650 font-bold'
+                    : 'bg-orange-50 text-orange-600'
 
                   return (
                     <tr key={c.id} className="hover:bg-slate-50/40 transition-colors">
-                      <td className="px-4 py-3.5 space-y-0.5">
-                        <strong className="text-sm text-slate-800 block">{c.title}</strong>
-                        <span className="text-xs text-slate-450 block font-normal leading-relaxed">{c.description}</span>
+                      <td className="px-4 py-3.5 max-w-[240px]">
+                        <strong className="text-sm text-slate-800 block truncate" title={c.title}>{c.title}</strong>
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap text-[#FF7A00] font-bold">
                         <span className="flex items-center gap-1">
@@ -344,19 +338,34 @@ export default function D2DCampaignTab({ token }) {
                           <Navigation size={12} className="text-slate-400" /> {c.routeName}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 text-slate-600">
-                        {c.sabhaName ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-650 px-2.5 py-0.5 rounded-full font-bold">
-                            <Shield size={10} /> {c.sabhaName}
-                          </span>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-slate-650 font-semibold">
+                        {c.startTime ? (
+                          <>
+                            <div className="flex items-center gap-1">
+                              <Calendar size={12} className="text-slate-400" />
+                              <span>{new Date(c.startTime).toLocaleDateString([], { dateStyle: 'short' })}</span>
+                              <span className="text-[10px] text-slate-400">
+                                {new Date(c.startTime).toLocaleTimeString([], { timeStyle: 'short' })}
+                              </span>
+                            </div>
+                            {c.endTime && (
+                              <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1">
+                                <span className="font-bold">To:</span>
+                                <span>{new Date(c.endTime).toLocaleDateString([], { dateStyle: 'short' })}</span>
+                                <span>{new Date(c.endTime).toLocaleTimeString([], { timeStyle: 'short' })}</span>
+                              </div>
+                            )}
+                          </>
                         ) : (
-                          <span className="text-slate-400 italic">None</span>
+                          <span className="text-slate-400 italic">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3.5 text-center whitespace-nowrap">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-black text-[10px] uppercase ${statusColors}`}>
-                          {c.status === 'active' ? (
-                            <Clock size={10} className="animate-spin" style={{ animationDuration: '3s' }} />
+                          {c.status === 'running' ? (
+                            <Clock size={10} className="animate-spin text-blue-500" style={{ animationDuration: '1.5s' }} />
+                          ) : c.status === 'active' ? (
+                            <Clock size={10} className="animate-pulse" />
                           ) : (
                             <CheckCircle size={10} />
                           )}
@@ -392,7 +401,7 @@ export default function D2DCampaignTab({ token }) {
                                   onClick={() => { handleToggleStatus(c.id, c.status); setActiveDropdownId(null); }}
                                   className="w-full px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-55 flex items-center gap-2 font-semibold"
                                 >
-                                  {c.status === 'active' ? '✓ Mark Complete' : '📟 Re-activate'}
+                                  {c.status === 'completed' ? '📟 Re-activate' : '✓ Mark Complete'}
                                 </button>
                                 <div className="border-t border-slate-50 my-1" />
                                 <button
@@ -496,24 +505,58 @@ export default function D2DCampaignTab({ token }) {
                 </select>
               </div>
 
-              {/* Select Sabha (Optional) */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Align Sabha Assembly (Optional)</label>
-                <select
-                  disabled={viewMode}
-                  value={form.sabhaId}
-                  onChange={(e) => setForm(prev => ({ ...prev, sabhaId: e.target.value }))}
-                  className="w-full bg-slate-100/70 text-slate-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#FF7A00]/25 font-semibold cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
-                >
-                  <option value="">None / No Sabha alignment</option>
-                  {mockSabhas.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+              {/* Start Date & Time and End Date & Time */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Start Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    disabled={viewMode}
+                    value={form.startTime}
+                    onChange={(e) => setForm(prev => ({ ...prev, startTime: e.target.value }))}
+                    className="w-full bg-slate-100/70 text-slate-800 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#FF7A00]/25 font-semibold transition-all disabled:opacity-75 disabled:cursor-not-allowed"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">End Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    disabled={viewMode}
+                    value={form.endTime}
+                    onChange={(e) => setForm(prev => ({ ...prev, endTime: e.target.value }))}
+                    className="w-full bg-slate-100/70 text-slate-800 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#FF7A00]/25 font-semibold transition-all disabled:opacity-75 disabled:cursor-not-allowed"
+                  />
+                </div>
               </div>
 
               {/* Submit Buttons */}
               <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 flex-shrink-0">
+                {viewMode && currentCampaign && currentCampaign.status !== 'completed' && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const updated = await api(`/api/election-campaign/d2d-campaigns/${selectedId}`, {
+                          method: 'PATCH',
+                          token,
+                          body: { status: 'running' },
+                        })
+                        setCampaigns(prev => prev.map(c => c.id === selectedId ? updated.campaign : c))
+                        setModalOpen(false)
+                        if (onRunCampaign) {
+                          onRunCampaign(updated.campaign)
+                        }
+                      } catch (err) {
+                        alert(err.message || 'Failed to start D2D Campaign')
+                      }
+                    }}
+                    className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-blue-500 to-indigo-600 shadow-md hover:brightness-110 transition-all flex items-center gap-1.5"
+                  >
+                    ⚡ Run Campaign
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}

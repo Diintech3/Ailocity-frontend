@@ -12,6 +12,7 @@ import BDLogin from './pages/bd/Login'
 import TCDashboard from './pages/tc/Dashboard'
 import PMDashboard from './pages/pm/Dashboard'
 import ElectionDashboard from './pages/election/Dashboard'
+import FieldUserApp from './pages/election/FieldUserApp'
 import { TOKEN_SUPERADMIN, TOKEN_ADMIN, TOKEN_CLIENT, TOKEN_BD, TOKEN_TC, TOKEN_SUBCLIENT, TOKEN_PM, TOKEN_ELECTION } from './lib/api'
 
 function tcToken() {
@@ -54,8 +55,11 @@ function App() {
           </Guard>
         } />
 
-        {/* App Portal Login */}
-        <Route path="/client/login" element={<ClientLogin />} />
+        {/* App Portal Login & Register */}
+        <Route path="/client/login" element={<ClientLogin initialMode="login" />} />
+        <Route path="/client/register" element={<ClientLogin initialMode="register" />} />
+        <Route path="/user/login" element={<ClientLogin initialMode="login" />} />
+        <Route path="/user/register" element={<ClientLogin initialMode="register" />} />
         <Route path="/client/portal" element={
           <Guard tokenKey={TOKEN_CLIENT} fallback="/client/login">
             <ClientPortal />
@@ -92,7 +96,6 @@ function App() {
             <PMDashboard />
           </Guard>
         } />
-
         {/* Ailocity Election */}
         <Route path="/election/login" element={<Navigate to="/client/login" replace />} />
         <Route path="/election/dashboard" element={
@@ -100,6 +103,9 @@ function App() {
             <ElectionDashboard />
           </Guard>
         } />
+        <Route path="/election/app" element={<FieldUserApp />} />
+        <Route path="/election/user" element={<FieldUserApp />} />
+        <Route path="/user/app" element={<FieldUserApp />} />
       </Routes>
     </BrowserRouter>
   )
